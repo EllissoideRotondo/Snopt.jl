@@ -1,0 +1,21 @@
+name = "Snopt"
+uuid = "09fd284b-e7b0-4fba-b41f-c39527135ddd"
+version = "1.0.0"
+authors = ["Alex Pascarella <alex.pascarella@proton.me>"]
+
+[workspace]
+projects = ["examples", "test"]
+
+[deps]
+Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
+[compat]
+julia = "1.9"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
+

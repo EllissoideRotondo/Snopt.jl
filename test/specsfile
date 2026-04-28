@@ -1,0 +1,12 @@
+BEGIN SNOPT OPTIONS
+   Iterations limit             1.000000E+05
+   Minor iteration limit        1.000000E+03
+   Major iteration limit        1.000000E+04
+   Superbasics limit            2.000000E+04
+   Function precision           1.000000E-10
+   Major print level            1.000000E+00
+   Major feasibility tolerance  1.000000E-06
+   Major optimality tolerance   1.000000E-06
+   Major step limit             1.000000E-02
+   Elastic weight               1.000000E+07
+END SNOPT OPTIONS
