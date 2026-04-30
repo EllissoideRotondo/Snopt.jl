@@ -68,7 +68,14 @@ end
 
 has_snopt() = !isempty(libsnopt7)
 
-include("C_wrapper.jl")
+include("types.jl")
+include("workspace.jl")
+include("solve_wrappers.jl")
+include("callbacks.jl")
+include("options.jl")
+include("memory.jl")
+include("high_level.jl")
+include("raw_api.jl")
 
 export SnoptA
 export SnoptB

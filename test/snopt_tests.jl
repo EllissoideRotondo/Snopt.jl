@@ -150,6 +150,38 @@ end
                                      options = ["Major print level 0"])
 end
 
+@testset "public validation and callback exceptions" begin
+    ws = make_ws()
+    objfun = make_objfun(
+        x -> (x[1] - 1)^2,
+        (g, x) -> begin g[1] = 2(x[1] - 1) end,
+        ws.iw
+    )
+    prob = make_unconstrained_prob(
+        ws, [0.0], [-10.0], [10.0], objfun, make_dummy_confun()
+    )
+    prob.hs = Int32[]
+    @test_throws DimensionMismatch snopt!(prob)
+
+    silent_options = [
+        "Major print level" => 0,
+        "Minor print level" => 0,
+    ]
+    @test_throws ErrorException snopt(
+        x -> error("objective boom"),
+        (g, x) -> begin g[1] = 2x[1] end,
+        [0.0];
+        options = silent_options
+    )
+    @test_throws ErrorException snopt(
+        x -> x[1]^2,
+        (g, x) -> begin g[1] = 2x[1] end,
+        [1.0];
+        options = silent_options,
+        callback = _ -> error("progress boom")
+    )
+end
+
 @testset "SnoptA toy problem" begin
     ws = make_ws()
     set_option!(ws, "Derivative option", 1)
