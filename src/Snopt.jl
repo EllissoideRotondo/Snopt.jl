@@ -51,10 +51,6 @@ function __init__()
     if Sys.iswindows()
         haskey(ENV, "SNOPTDIR") && maybe_prepend_process_path!(ENV["SNOPTDIR"])
         haskey(ENV, "SNOPT_GFORTRAN_BINDIR") && maybe_prepend_process_path!(ENV["SNOPT_GFORTRAN_BINDIR"])
-        #@warn("""
-        #      Snopt.jl: Windows is not yet supported.
-        #      Please use Linux or macOS and set SNOPTDIR to the directory containing libsnopt7.
-        #      """)
     end
     global libsnopt7 = find_snopt_lib()
     if isempty(libsnopt7)
@@ -77,11 +73,17 @@ include("C_wrapper.jl")
 export SnoptA
 export SnoptB
 export SnoptC
+export SnoptMajorLog
+export SnoptMemory
 export SnoptProblem
+export SnoptResult
+export make_snlog
+export snopt
 export snopt!
 export snopta!
 export snoptb!
 export snoptc!
+export snmemb
 export set_option!
 export read_options
 export initialize

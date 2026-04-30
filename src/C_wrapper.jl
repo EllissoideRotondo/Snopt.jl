@@ -100,6 +100,58 @@ mutable struct SnoptC{F<:Function}
     usrfun::F
 end
 
+struct SnoptMemory
+    info::Int
+    miniw::Int
+    minrw::Int
+end
+
+struct SnoptResult
+    status::Int
+    status_symbol::Symbol
+    objective::Float64
+    x::Vector{Float64}
+    lambda::Vector{Float64}
+    num_inf::Int
+    sum_inf::Float64
+    iterations::Int
+    major_itns::Int
+    run_time::Float64
+    memory::SnoptMemory
+end
+
+struct SnoptMajorLog
+    iteration::Int
+    major_iter::Int
+    minor_iter::Int
+    n_superbasics::Int
+    n_swaps::Int
+    objective::Float64
+    merit::Float64
+    penalty_norm::Float64
+    step::Float64
+    primal_infeasibility::Float64
+    dual_infeasibility::Float64
+    max_violation::Float64
+    relative_violation::Float64
+    condition_hessian::Float64
+    objective_scale::Float64
+    objective_add::Float64
+    f_objective::Float64
+    f_merit::Float64
+    minimize::Int
+    n::Int
+    nb::Int
+    nncon::Int
+    nnobj::Int
+    kt_conditions::NTuple{2, Bool}
+    x::Vector{Float64}
+    fcon::Vector{Float64}
+    fx::Vector{Float64}
+    ycon::Vector{Float64}
+    hs::Vector{Int32}
+end
+
 function free!(prob::SnoptWorkspace)
     prob.finalized && return nothing
     prob.finalized = true
@@ -122,19 +174,22 @@ function start_mode_code(start::AbstractString)::Cint
     throw(ArgumentError("SNOPT start mode must be Cold, Warm, or Hot; got $(repr(start))"))
 end
 
-function snopt!(prob::SnoptB)
-    return snoptb!(prob)
+function snopt!(prob::SnoptB; start::String = "Cold", name::String = "Julia",
+                snlog=nothing)
+    return snoptb!(prob; start, name, snlog)
 end
 
-function snoptb!(prob::SnoptB)
+function snoptb!(prob::SnoptB; start::String = "Cold", name::String = "Julia",
+                 snlog=nothing)
     nc    = prob.nc
     nnCon = nc
     nnJac = nc > 0 ? prob.n : 0
-    inform = snoptb!(prob.ws, "Cold", "Julia   ",
+    inform = snoptb!(prob.ws, start, name,
                      prob.m_eff, prob.n, nnCon, prob.n, nnJac,
                      0.0, 0,
                      prob.confun, prob.objfun,
-                     prob.J, prob.bl, prob.bu, prob.hs, prob.x)
+                     prob.J, prob.bl, prob.bu, prob.hs, prob.x;
+                     snlog)
     prob.obj_val = prob.ws.obj_val
     prob.status  = inform
     prob.lambda  = prob.ws.lambda
@@ -150,7 +205,7 @@ function snopt!(prob::SnoptC)
     return snoptc!(prob)
 end
 
-snopt_no_progress(::NamedTuple) = true
+snopt_no_progress(event) = true
 
 workspace_value(ws_iw::Vector{Int32}, index::Int) =
     length(ws_iw) >= index ? max(Int(ws_iw[index]), 0) : 0
@@ -160,11 +215,100 @@ function progress_iters(ws_iw::Vector{Int32})
             workspace_value(ws_iw, IW_MINOR_ITNS))
 end
 
-call_progress(::Nothing, ::NamedTuple) = true
-call_progress(callback, event::NamedTuple) = callback(event) !== false
+call_progress(::Nothing, event) = true
+call_progress(callback, event) = callback(event) !== false
 
 legacy_progress_callback(log_fn::Function) =
     event -> event.kind === :objective ? log_fn(event.major_iter, event.x, event.f) : true
+
+copy_cdouble_vector(ptr::Ptr{Cdouble}, len::Integer) =
+    len <= 0 ? Float64[] : copy(unsafe_wrap(Array, ptr, Int(len)))
+
+copy_cint32_vector(ptr::Ptr{Cint}, len::Integer) =
+    len <= 0 ? Int32[] : copy(unsafe_wrap(Array, ptr, Int(len)))
+
+"""
+    make_snlog(callback)
+
+Create a Julia callback compatible with SNOPT's `snLog` hook. `callback` is
+called with a [`SnoptMajorLog`](@ref) after each major-iteration log event.
+Returning `false` requests termination from SNOPT.
+"""
+function make_snlog(callback)
+    function snlog(iAbort_::Ptr{Cint}, KTcond_::Ptr{Cint},
+                   MjrPrt_::Ptr{Cint}, minimz_::Ptr{Cint},
+                   n_::Ptr{Cint}, nb_::Ptr{Cint}, nnCon0_::Ptr{Cint},
+                   nnObj_::Ptr{Cint}, nS_::Ptr{Cint},
+                   itn_::Ptr{Cint}, nMajor_::Ptr{Cint},
+                   nMinor_::Ptr{Cint}, nSwap_::Ptr{Cint},
+                   condHz_::Ptr{Cdouble}, iObj_::Ptr{Cint},
+                   sclObj_::Ptr{Cdouble}, ObjAdd_::Ptr{Cdouble},
+                   fObj_::Ptr{Cdouble}, fMrt_::Ptr{Cdouble},
+                   PenNrm_::Ptr{Cdouble}, step_::Ptr{Cdouble},
+                   prInf_::Ptr{Cdouble}, duInf_::Ptr{Cdouble},
+                   vimax_::Ptr{Cdouble}, virel_::Ptr{Cdouble},
+                   hs_::Ptr{Cint}, ne_::Ptr{Cint},
+                   nlocJ_::Ptr{Cint}, locJ_::Ptr{Cint},
+                   indJ_::Ptr{Cint}, Jcol_::Ptr{Cdouble},
+                   Ascale_::Ptr{Cdouble}, bl_::Ptr{Cdouble},
+                   bu_::Ptr{Cdouble}, Fx_::Ptr{Cdouble},
+                   fCon_::Ptr{Cdouble}, yCon_::Ptr{Cdouble},
+                   x_::Ptr{Cdouble}, cu_::Ptr{UInt8},
+                   lencu_::Ptr{Cint}, iu_::Ptr{Cint},
+                   leniu_::Ptr{Cint}, ru_::Ptr{Cdouble},
+                   lenru_::Ptr{Cint}, cw_::Ptr{UInt8},
+                   lencw_::Ptr{Cint}, iw_::Ptr{Cint},
+                   leniw_::Ptr{Cint}, rw_::Ptr{Cdouble},
+                   lenrw_::Ptr{Cint})::Cvoid
+        n = Int(unsafe_load(n_))
+        nb = Int(unsafe_load(nb_))
+        nncon = Int(unsafe_load(nnCon0_))
+        ktcond = unsafe_wrap(Array, KTcond_, 2)
+        penalty = unsafe_wrap(Array, PenNrm_, 4)
+        objective_add = unsafe_load(ObjAdd_)
+        f_objective = unsafe_load(fObj_)
+        f_merit = unsafe_load(fMrt_)
+        objective_scale = unsafe_load(sclObj_)
+        iobj = Int(unsafe_load(iObj_))
+        x_values = copy_cdouble_vector(x_, nb)
+        linear_objective = (iobj > 0 && n + iobj <= length(x_values)) ?
+            objective_scale * x_values[n + iobj] : 0.0
+        event = SnoptMajorLog(
+            Int(unsafe_load(itn_)),
+            Int(unsafe_load(nMajor_)),
+            Int(unsafe_load(nMinor_)),
+            Int(unsafe_load(nS_)),
+            Int(unsafe_load(nSwap_)),
+            objective_add + linear_objective + f_objective,
+            objective_add + linear_objective + f_merit,
+            Float64(penalty[3]),
+            unsafe_load(step_),
+            unsafe_load(prInf_),
+            unsafe_load(duInf_),
+            unsafe_load(vimax_),
+            unsafe_load(virel_),
+            unsafe_load(condHz_),
+            objective_scale,
+            objective_add,
+            f_objective,
+            f_merit,
+            Int(unsafe_load(minimz_)),
+            n,
+            nb,
+            nncon,
+            Int(unsafe_load(nnObj_)),
+            (ktcond[1] != 0, ktcond[2] != 0),
+            x_values,
+            copy_cdouble_vector(fCon_, nncon),
+            copy_cdouble_vector(Fx_, nncon),
+            copy_cdouble_vector(yCon_, nncon),
+            copy_cint32_vector(hs_, nb)
+        )
+        unsafe_store!(iAbort_, call_progress(callback, event) ? Cint(0) : Cint(1))
+        return
+    end
+    return snlog
+end
 
 """
     make_objfun(eval_obj, eval_grad, ws_iw; callback=nothing)
@@ -467,6 +611,281 @@ function initialize(printfile::String, summfile::String, leniw::Int, lenrw::Int)
     return prob
 end
 
+const SNOPT_MEMORY_WORKSPACE = 500
+
+memory_estimate_success(info::Int) = info == 100 || info == 104
+
+function check_memory_estimate(memory::SnoptMemory)
+    memory_estimate_success(memory.info) && return memory
+    throw(ErrorException("SNOPT memory estimator failed with info code $(memory.info)"))
+end
+
+function option_keyword(key::AbstractString)
+    keyword = String(strip(String(key)))
+    isempty(keyword) &&
+        throw(ArgumentError("SNOPT option keyword must not be empty or whitespace-only"))
+    return keyword
+end
+
+function option_keyword(key::Symbol)
+    return option_keyword(replace(String(key), "_" => " "))
+end
+
+function option_keyword(key)
+    throw(ArgumentError("SNOPT option keyword must be a String or Symbol, got $(typeof(key))"))
+end
+
+function apply_option!(ws::SnoptWorkspace, option::Pair)
+    key = option_keyword(first(option))
+    value = last(option)
+    if value isa Bool
+        throw(ArgumentError("SNOPT option $(repr(key)) does not accept Bool values"))
+    elseif value isa Integer
+        set_option!(ws, key, Int(value))
+    elseif value isa AbstractFloat
+        float_value = Float64(value)
+        isfinite(float_value) ||
+            throw(ArgumentError("SNOPT option $(repr(key)) requires a finite floating-point value"))
+        set_option!(ws, key, float_value)
+    elseif value isa AbstractString
+        string_value = String(strip(String(value)))
+        isempty(string_value) &&
+            throw(ArgumentError("SNOPT option $(repr(key)) string value must not be empty or whitespace-only"))
+        set_option!(ws, string(key, " ", string_value))
+    elseif value isa Symbol
+        set_option!(ws, string(key, " ", option_keyword(value)))
+    else
+        throw(ArgumentError("SNOPT option $(repr(key)) value must be an integer, finite float, string, or symbol; got $(typeof(value))"))
+    end
+    return ws
+end
+
+function apply_options!(ws::SnoptWorkspace, options::Nothing)
+    return ws
+end
+
+function apply_options!(ws::SnoptWorkspace, options::AbstractVector{<:Pair})
+    for option in options
+        apply_option!(ws, option)
+    end
+    return ws
+end
+
+function apply_options!(ws::SnoptWorkspace, options)
+    throw(ArgumentError("SNOPT options must be a Vector of Pairs, got $(typeof(options))"))
+end
+
+"""
+    snmemb(ws, m, n, neJ, negCon, nnCon, nnJac, nnObj) -> SnoptMemory
+
+Estimate the SNOPTB/SNOPTC integer and real workspace lengths using SNOPT's
+`snMemB` routine. The shared library exposes this through the C ABI wrapper
+`f_snmem`, which calls `snMem`/`snMemB` internally.
+
+Call `initialize` before using this workspace method, and apply any options
+that may affect memory before calling `snmemb`.
+"""
+function snmemb(ws::SnoptWorkspace, m::Integer, n::Integer, neJ::Integer,
+                negCon::Integer, nnCon::Integer, nnJac::Integer,
+                nnObj::Integer)
+    info  = Int32[0]
+    miniw = Int32[0]
+    minrw = Int32[0]
+    ccall((:f_snmem, libsnopt7), Cvoid,
+          (Ptr{Cint}, Cint, Cint, Cint, Cint, Cint, Cint, Cint,
+           Ptr{Cint}, Ptr{Cint},
+           Ptr{Cint}, Cint, Ptr{Cdouble}, Cint),
+          info,
+          Int(m), Int(n), Int(neJ), Int(negCon), Int(nnCon),
+          Int(nnObj), Int(nnJac),
+          miniw, minrw,
+          ws.iw, ws.leniw, ws.rw, ws.lenrw)
+    memory = SnoptMemory(Int(info[1]), Int(miniw[1]), Int(minrw[1]))
+    ws.status = memory.info
+    return memory
+end
+
+"""
+    snmemb(m, n, neJ, negCon, nnCon, nnJac, nnObj; options=nothing,
+           printfile="", summfile="")
+
+Initialize a temporary bootstrap workspace, apply any SNOPT options, and return
+the SNOPTB/SNOPTC memory estimate.
+"""
+function snmemb(m::Integer, n::Integer, neJ::Integer, negCon::Integer,
+                nnCon::Integer, nnJac::Integer, nnObj::Integer;
+                options=nothing, printfile::String = "", summfile::String = "")
+    ws = initialize(printfile, summfile, SNOPT_MEMORY_WORKSPACE,
+                    SNOPT_MEMORY_WORKSPACE)
+    try
+        apply_options!(ws, options)
+        return snmemb(ws, m, n, neJ, negCon, nnCon, nnJac, nnObj)
+    finally
+        free!(ws)
+    end
+end
+
+function float_vector(values, name::AbstractString)
+    values === nothing && throw(ArgumentError("$name must be provided"))
+    values isa Number && throw(ArgumentError("$name must be a vector, not a scalar"))
+    return Float64.(collect(values))
+end
+
+function bound_vector(values, n::Int, default::Float64, name::AbstractString)
+    values === nothing && return fill(default, n)
+    values isa Number && return fill(Float64(values), n)
+    vector = Float64.(collect(values))
+    length(vector) == n ||
+        throw(ArgumentError("$name must have length $n; got $(length(vector))"))
+    return vector
+end
+
+function dummy_jacobian_sparsity(n::Int)
+    colptr = Int32.(vcat(1, fill(2, n)))
+    return SparseMatrixCSC{Float64,Int32}(1, n, colptr, Int32[1], Float64[0.0])
+end
+
+function dense_jacobian_sparsity(nc::Int, n::Int)
+    colptr = Vector{Int32}(undef, n + 1)
+    rowval = Vector{Int32}(undef, nc * n)
+    nzval = zeros(Float64, nc * n)
+    next = 1
+    colptr[1] = Int32(next)
+    for j in 1:n
+        for i in 1:nc
+            rowval[next] = Int32(i)
+            next += 1
+        end
+        colptr[j + 1] = Int32(next)
+    end
+    return SparseMatrixCSC{Float64,Int32}(nc, n, colptr, rowval, nzval)
+end
+
+function jacobian_sparsity32(J::SparseMatrixCSC, nc::Int, n::Int)
+    size(J) == (nc, n) ||
+        throw(ArgumentError("J must have size ($nc, $n); got $(size(J))"))
+    return SparseMatrixCSC{Float64,Int32}(
+        nc, n, Int32.(J.colptr), Int32.(J.rowval), Float64.(J.nzval))
+end
+
+function prepare_jacobian_sparsity(J, nc::Int, n::Int)
+    nc == 0 && return dummy_jacobian_sparsity(n)
+    J === nothing && return dense_jacobian_sparsity(nc, n)
+    J isa SparseMatrixCSC ||
+        throw(ArgumentError("J must be a SparseMatrixCSC Jacobian sparsity pattern"))
+    return jacobian_sparsity32(J, nc, n)
+end
+
+function prepare_constraint_data(eval_con, eval_jac, lcon, ucon)
+    no_bounds = lcon === nothing && ucon === nothing
+    no_callbacks = eval_con === nothing && eval_jac === nothing
+    no_bounds && no_callbacks && return (0, Float64[], Float64[])
+    (lcon === nothing || ucon === nothing) &&
+        throw(ArgumentError("both lcon and ucon must be provided for constrained problems"))
+    lcon_vector = float_vector(lcon, "lcon")
+    ucon_vector = float_vector(ucon, "ucon")
+    length(lcon_vector) == length(ucon_vector) ||
+        throw(ArgumentError("lcon and ucon must have the same length"))
+    if isempty(lcon_vector)
+        no_callbacks ||
+            throw(ArgumentError("constraint callbacks were provided, but lcon/ucon are empty"))
+        return (0, Float64[], Float64[])
+    end
+    eval_con === nothing &&
+        throw(ArgumentError("eval_con must be provided for constrained problems"))
+    eval_jac === nothing &&
+        throw(ArgumentError("eval_jac must be provided for constrained problems"))
+    return (length(lcon_vector), lcon_vector, ucon_vector)
+end
+
+function snopt_result(prob::SnoptB, memory::SnoptMemory)
+    status = Int(prob.status)
+    status_symbol = get(SNOPT_STATUS, status, :Unknown_Status)
+    lambda_length = prob.n + prob.nc
+    return SnoptResult(status, status_symbol, prob.obj_val, copy(prob.x[1:prob.n]),
+                       copy(prob.lambda[1:lambda_length]),
+                       prob.ws.num_inf, prob.ws.sum_inf,
+                       prob.ws.iterations, prob.ws.major_itns, prob.ws.run_time,
+                       memory)
+end
+
+"""
+    snopt(eval_obj, eval_grad, x0; kwargs...) -> SnoptResult
+
+Solve a nonlinear optimization problem with SNOPTB using Julia callbacks.
+`eval_obj(x)` returns the scalar objective and `eval_grad(g, x)` fills the
+objective gradient.
+
+Keyword arguments:
+
+  * `lb`, `ub`: variable lower/upper bounds; scalars are broadcast.
+  * `eval_con`, `eval_jac`, `lcon`, `ucon`: optional nonlinear constraints.
+    `eval_con(c, x)` fills constraint values and `eval_jac(jnz, x)` fills the
+    Jacobian nonzeros in the column-major order of `J`.
+  * `J`: optional sparse constraint-Jacobian sparsity. If omitted for a
+    constrained problem, a dense sparsity pattern is used.
+  * `options`: SNOPT options as a vector of pairs, for example
+    `["Major print level" => 0, :minor_print_level => 0]`.
+  * `callback`: optional callback receiving objective/constraint events.
+  * `snlog`: optional callback receiving `SnoptMajorLog` major-iteration events.
+"""
+function snopt(eval_obj::Function, eval_grad::Function,
+               x0::AbstractVector{<:Real};
+               lb=nothing, ub=nothing,
+               eval_con=nothing, eval_jac=nothing,
+               lcon=nothing, ucon=nothing,
+               J=nothing,
+               options=nothing,
+               callback=nothing,
+               snlog=nothing,
+               printfile::String = "",
+               summfile::String = "",
+               start::String = "Cold",
+               name::String = "Julia")
+    x0_vector = Float64.(collect(x0))
+    n = length(x0_vector)
+    n > 0 || throw(ArgumentError("x0 must contain at least one variable"))
+
+    xlow = bound_vector(lb, n, -Inf, "lb")
+    xupp = bound_vector(ub, n, Inf, "ub")
+    nc, lcon_vector, ucon_vector =
+        prepare_constraint_data(eval_con, eval_jac, lcon, ucon)
+
+    m_eff = nc > 0 ? nc : 1
+    J32 = prepare_jacobian_sparsity(J, nc, n)
+
+    neJ = nnz(J32)
+    negCon = nc > 0 ? neJ : 0
+    nnCon = nc
+    nnJac = nc > 0 ? n : 0
+    nnObj = n
+
+    memory = check_memory_estimate(
+        snmemb(m_eff, n, neJ, negCon, nnCon, nnJac, nnObj;
+               options, printfile, summfile))
+
+    ws = initialize(printfile, summfile, memory.miniw, memory.minrw)
+    try
+        apply_options!(ws, options)
+
+        objfun = make_objfun(eval_obj, eval_grad, ws.iw; callback)
+        confun = nc > 0 ? make_confun(eval_con, eval_jac, J32, ws.iw; callback) :
+                          make_dummy_confun()
+
+        x = [x0_vector; zeros(m_eff)]
+        bl = [xlow; nc > 0 ? lcon_vector : [-Inf]]
+        bu = [xupp; nc > 0 ? ucon_vector : [Inf]]
+        hs = zeros(Int32, n + m_eff)
+
+        prob = SnoptB(ws, n, nc, m_eff, x, bl, bu, hs, J32,
+                      0.0, 0, Float64[], objfun, confun)
+        snoptb!(prob; start, name, snlog)
+        return snopt_result(prob, memory)
+    finally
+        free!(ws)
+    end
+end
+
 
 function specs_status_message(info::Int)
     info == 101 && return "Specs file read successfully."
@@ -567,7 +986,8 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
                  fObj::Float64, iObj::Int,
                  confun::Function, objfun::Function,
                  J::SparseMatrixCSC, bl::Vector{Float64}, bu::Vector{Float64},
-                 hs::Vector{Int32}, x::Vector{Float64})
+                 hs::Vector{Int32}, x::Vector{Float64};
+                 snlog=nothing)
 
     @assert n + m == length(x) == length(bl) == length(bu)
     @assert n + m == length(hs)
@@ -605,27 +1025,72 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
     minrw   = Int32[0]
     start_code = start_mode_code(start)
 
-    ccall((:f_snoptb, libsnopt7), Cvoid,
-          (Cint, Cstring,
-           Cint, Cint, Cint, Cint, Cint, Cint,
-           Cint, Cdouble,
-           Ptr{Cvoid}, Ptr{Cvoid},
-           Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint},
-           Ptr{Float64}, Ptr{Float64}, Ptr{Cint},
-           Ptr{Float64}, Ptr{Float64}, Ptr{Float64},
-           Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
-           Ptr{Cint}, Ptr{Cint},
-           Ptr{Cint}, Cint, Ptr{Cdouble}, Cint,
-           Ptr{Cint}, Cint, Ptr{Cdouble}, Cint),
-          start_code, name, m, n, neJ, nnCon, nnObj, nnJac,
-          iObj, fObj,
-          con_callback, obj_callback,
-          valJ, indJ, locJ,
-          bl, bu, hs, prob.x, pi_, prob.lambda,
-          status, nS, nInf, sInf, obj_val,
-          miniw, minrw,
-          prob.iu, prob.leniu, prob.ru, prob.lenru,
-          prob.iw, prob.leniw, prob.rw, prob.lenrw)
+    if snlog === nothing
+        GC.@preserve confun objfun begin
+            ccall((:f_snoptb, libsnopt7), Cvoid,
+                  (Cint, Cstring,
+                   Cint, Cint, Cint, Cint, Cint, Cint,
+                   Cint, Cdouble,
+                   Ptr{Cvoid}, Ptr{Cvoid},
+                   Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint},
+                   Ptr{Float64}, Ptr{Float64}, Ptr{Cint},
+                   Ptr{Float64}, Ptr{Float64}, Ptr{Float64},
+                   Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+                   Ptr{Cint}, Ptr{Cint},
+                   Ptr{Cint}, Cint, Ptr{Cdouble}, Cint,
+                   Ptr{Cint}, Cint, Ptr{Cdouble}, Cint),
+                  start_code, name, m, n, neJ, nnCon, nnObj, nnJac,
+                  iObj, fObj,
+                  con_callback, obj_callback,
+                  valJ, indJ, locJ,
+                  bl, bu, hs, prob.x, pi_, prob.lambda,
+                  status, nS, nInf, sInf, obj_val,
+                  miniw, minrw,
+                  prob.iu, prob.leniu, prob.ru, prob.lenru,
+                  prob.iw, prob.leniw, prob.rw, prob.lenrw)
+        end
+    else
+        snlog_fn = make_snlog(snlog)
+        snlog_callback = @cfunction($snlog_fn, Cvoid,
+            (Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint},
+             Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint},
+             Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint},
+             Ptr{Cdouble}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble},
+             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble},
+             Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint},
+             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble},
+             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble},
+             Ptr{UInt8}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint},
+             Ptr{Cdouble}, Ptr{Cint}, Ptr{UInt8}, Ptr{Cint},
+             Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cint}))
+        null_callback = Ptr{Cvoid}(C_NULL)
+        GC.@preserve confun objfun snlog_fn begin
+            ccall((:f_snkerb, libsnopt7), Cvoid,
+                  (Cint, Cstring,
+                   Cint, Cint, Cint, Cint, Cint, Cint,
+                   Cint, Cdouble,
+                   Ptr{Cvoid}, Ptr{Cvoid},
+                   Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid},
+                   Ptr{Cdouble}, Ptr{Cint}, Ptr{Cint},
+                   Ptr{Float64}, Ptr{Float64}, Ptr{Cint},
+                   Ptr{Float64}, Ptr{Float64}, Ptr{Float64},
+                   Ptr{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+                   Ptr{Cint}, Ptr{Cint},
+                   Ptr{Cint}, Cint, Ptr{Cdouble}, Cint,
+                   Ptr{Cint}, Cint, Ptr{Cdouble}, Cint),
+                  start_code, name, m, n, neJ, nnCon, nnObj, nnJac,
+                  iObj, fObj,
+                  con_callback, obj_callback,
+                  snlog_callback, null_callback, null_callback, null_callback,
+                  valJ, indJ, locJ,
+                  bl, bu, hs, prob.x, pi_, prob.lambda,
+                  status, nS, nInf, sInf, obj_val,
+                  miniw, minrw,
+                  prob.iu, prob.leniu, prob.ru, prob.lenru,
+                  prob.iw, prob.leniw, prob.rw, prob.lenrw)
+        end
+    end
 
     prob.status  = status[1]
     prob.obj_val = obj_val[1]

@@ -49,6 +49,15 @@ function make_constrained_prob_c(ws, x0, bl_x, bu_x, bl_c, bu_c, usrfun, J)
     return SnoptC(ws, n, nc, m, x, bl, bu, hs, J, 0.0, 0, Float64[], usrfun)
 end
 
+mutable struct SnoptLogCollector
+    logs::Vector{SnoptMajorLog}
+end
+
+function (collector::SnoptLogCollector)(event)
+    push!(collector.logs, event)
+    return true
+end
+
 @testset "Workspace initialization" begin
     ws = initialize("", "")
     @test ws isa Snopt.SnoptWorkspace
@@ -61,6 +70,24 @@ end
     @test ws2.leniw == 40000
     @test ws2.lenrw == 5000
     @test SnoptProblem === SnoptB
+end
+
+@testset "SNOPTB memory estimation" begin
+    ws = make_ws()
+    memory = snmemb(ws, 1, 2, 1, 0, 0, 0, 2)
+    @test memory isa SnoptMemory
+    @test memory.info == 104
+    @test memory.miniw >= 500
+    @test memory.minrw >= 500
+
+    memory2 = snmemb(2, 4, 8, 8, 2, 4, 4;
+                     options = [
+                         "Major print level" => 0,
+                         "Minor print level" => 0,
+                     ])
+    @test memory2.info == 104
+    @test memory2.miniw >= memory.miniw
+    @test memory2.minrw >= memory.minrw
 end
 
 @testset "set_option! variants" begin
@@ -97,6 +124,30 @@ end
     if !Sys.iswindows()
         @test !occursin("Keyword not recognized", read(stdout_file, String))
     end
+end
+
+@testset "options vector of pairs" begin
+    ws = make_ws(silent=false)
+
+    @test Snopt.apply_options!(ws, [
+        "Major print level" => 0,
+        :minor_print_level => 0,
+        "Major feasibility tolerance" => 1.0e-8,
+        :hessian => :full_memory,
+    ]) === ws
+
+    @test_throws ArgumentError Snopt.apply_options!(ws, "Major print level 0")
+    @test_throws ArgumentError Snopt.apply_options!(ws, "Major print level" => 0)
+    @test_throws ArgumentError Snopt.apply_options!(ws, Dict("Major print level" => 0))
+    @test_throws ArgumentError Snopt.apply_options!(ws, ("Major print level" => 0,))
+    @test_throws ArgumentError Snopt.apply_options!(ws, ["Major print level 0"])
+    @test_throws ArgumentError Snopt.apply_options!(ws, ["Major print level" => false])
+    @test_throws ArgumentError Snopt.apply_options!(ws, ["Major feasibility tolerance" => Inf])
+    @test_throws ArgumentError Snopt.apply_options!(ws, ["Major print level" => ""])
+    @test_throws ArgumentError Snopt.apply_options!(ws, [1 => 0])
+
+    @test_throws ArgumentError snmemb(2, 4, 8, 8, 2, 4, 4;
+                                     options = ["Major print level 0"])
 end
 
 @testset "SnoptA toy problem" begin
@@ -172,6 +223,33 @@ end
     @test ws.status == 101
 end
 
+@testset "Low-level snopt API (unconstrained)" begin
+    result = snopt(
+        x -> (x[1] - 1)^2 + (x[2] - 2)^2,
+        (g, x) -> begin
+            g[1] = 2(x[1] - 1)
+            g[2] = 2(x[2] - 2)
+        end,
+        [0.0, 0.0];
+        lb = -10.0,
+        ub = 10.0,
+        options = [
+            "Major print level" => 0,
+            "Minor print level" => 0,
+        ]
+    )
+
+    @test result isa SnoptResult
+    @test result.status == 1
+    @test result.status_symbol === :Solve_Succeeded
+    @test result.objective ≈ 0.0 atol=1e-6
+    @test result.x[1] ≈ 1.0 atol=1e-5
+    @test result.x[2] ≈ 2.0 atol=1e-5
+    @test result.memory.miniw > 0
+    @test result.memory.minrw > 0
+    @test !hasproperty(result, :problem)
+end
+
 # ---------------------------------------------------------------------------
 # 5. Unconstrained quadratic  min (x-1)^2 + (y-2)^2
 # ---------------------------------------------------------------------------
@@ -210,6 +288,37 @@ end
     @test all(event -> event.major_iter >= 0 && event.minor_iter >= 0, events)
 end
 
+@testset "snLog major iteration callback" begin
+    ws = make_ws()
+    collector = SnoptLogCollector(SnoptMajorLog[])
+
+    objfun = make_objfun(
+        x -> (x[1]-1)^2 + (x[2]-2)^2,
+        (g, x) -> begin g[1] = 2(x[1]-1); g[2] = 2(x[2]-2) end,
+        ws.iw
+    )
+    confun = make_dummy_confun()
+
+    prob = make_unconstrained_prob(
+        ws,
+        [0.0, 0.0],
+        fill(-10.0, 2),
+        fill(10.0, 2),
+        objfun, confun
+    )
+
+    status = snopt!(prob; snlog = collector)
+
+    @test status == 1
+    logs = collector.logs
+    @test !isempty(logs)
+    @test logs[end] isa SnoptMajorLog
+    @test all(log -> length(log.x) == prob.n + prob.m_eff, logs)
+    @test all(log -> length(log.hs) == prob.n + prob.m_eff, logs)
+    @test any(log -> log.major_iter >= 0 && log.minor_iter >= 0, logs)
+    @test minimum(abs(log.objective - prob.obj_val) for log in logs) <= 1e-6
+end
+
 @testset "Rosenbrock (unconstrained)" begin
     ws = make_ws()
 
@@ -238,6 +347,60 @@ end
     @test prob.ws.x[2] ≈ 1.0  atol=1e-4
     @test prob.x[1] ≈ 1.0  atol=1e-4
     @test prob.x[2] ≈ 1.0  atol=1e-4
+end
+
+@testset "Low-level snopt API (constrained)" begin
+    function eval_obj_ll(x)
+        x[1]*x[4]*(x[1]+x[2]+x[3]) + x[3]
+    end
+    function eval_grad_ll!(g, x)
+        g[1] = x[4]*(2x[1]+x[2]+x[3])
+        g[2] = x[1]*x[4]
+        g[3] = x[1]*x[4] + 1
+        g[4] = x[1]*(x[1]+x[2]+x[3])
+    end
+    function eval_con_ll!(c, x)
+        c[1] = x[1]*x[2]*x[3]*x[4]
+        c[2] = x[1]^2 + x[2]^2 + x[3]^2 + x[4]^2
+    end
+    function eval_jac_ll!(jnz, x)
+        jnz[1] = x[2]*x[3]*x[4]
+        jnz[2] = 2x[1]
+        jnz[3] = x[1]*x[3]*x[4]
+        jnz[4] = 2x[2]
+        jnz[5] = x[1]*x[2]*x[4]
+        jnz[6] = 2x[3]
+        jnz[7] = x[1]*x[2]*x[3]
+        jnz[8] = 2x[4]
+    end
+
+    J = sparse(
+        Int32[1,2,1,2,1,2,1,2],
+        Int32[1,1,2,2,3,3,4,4],
+        ones(8), 2, 4
+    )
+
+    result = snopt(
+        eval_obj_ll, eval_grad_ll!, [1.0, 5.0, 5.0, 1.0];
+        lb = ones(4),
+        ub = 5 * ones(4),
+        eval_con = eval_con_ll!,
+        eval_jac = eval_jac_ll!,
+        lcon = [25.0, 40.0],
+        ucon = [1e20, 40.0],
+        J,
+        options = [
+            "Major print level" => 0,
+            "Minor print level" => 0,
+        ]
+    )
+
+    @test result.status == 1
+    @test result.objective ≈ 17.0140 atol=1e-3
+    @test result.x[1] ≈ 1.0 atol=1e-3
+    @test result.x[2] ≈ 4.7430 atol=1e-3
+    @test result.x[3] ≈ 3.8211 atol=1e-3
+    @test result.x[4] ≈ 1.3791 atol=1e-3
 end
 
 # ---------------------------------------------------------------------------

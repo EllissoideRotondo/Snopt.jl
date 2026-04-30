@@ -22,7 +22,7 @@ shared library, then install the package:
 
 ```julia
 import Pkg
-Pkg.add(url="https://github.com/EllissoideRotondo/Snopt.jl")
+Pkg.add("Snopt")
 using Snopt
 Snopt.has_snopt()  # true if the library was found
 ```
@@ -35,10 +35,49 @@ export LD_LIBRARY_PATH=/path/to/snopt:$LD_LIBRARY_PATH
 
 ## Usage
 
-This package is intended to be used as a solver backend through OptimizationSnopt,
-an [Optimization.jl](https://github.com/SciML/Optimization.jl) interface
-that is currently under development. Direct use of the low-level C wrapper is
-not recommended.
+For most SciML workflows, use
+[OptimizationSnopt.jl](https://github.com/EllissoideRotondo/OptimizationSnopt.jl)
+through [Optimization.jl](https://github.com/SciML/Optimization.jl). `Snopt.jl`
+also provides a small low-level API for direct use with Julia callbacks.
+
+```julia
+using Snopt
+
+result = snopt(
+    x -> (x[1] - 1)^2 + (x[2] - 2)^2,
+    (g, x) -> begin
+        g[1] = 2(x[1] - 1)
+        g[2] = 2(x[2] - 2)
+    end,
+    [0.0, 0.0];
+    lb = -10.0,
+    ub = 10.0,
+    options = [
+        "Major print level" => 0,
+        "Minor print level" => 0,
+    ],
+)
+
+result.status          # SNOPT inform code
+result.status_symbol   # symbolic status
+result.objective
+result.x
+```
+
+Constrained problems can provide nonlinear constraint callbacks and a sparse
+Jacobian sparsity pattern `J`. If `J` is omitted, a dense pattern is assumed.
+The `snopt` API calls SNOPT's own `snMemB` memory estimator through the exported
+`f_snmem` wrapper before allocating the solve workspace.
+Pass solver options as a vector of pairs. Keys may be strings or symbols; symbol
+underscores are converted to spaces, so `:major_print_level => 0` is equivalent
+to `"Major print level" => 0`.
+
+For manual workspace sizing, call `snmemb` directly:
+
+```julia
+memory = snmemb(m, n, neJ, negCon, nnCon, nnJac, nnObj)
+memory.miniw, memory.minrw
+```
 
 ## Platform support
 
