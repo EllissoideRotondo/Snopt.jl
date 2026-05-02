@@ -27,10 +27,12 @@ using Snopt
 Snopt.has_snopt()  # true if the library was found
 ```
 
-On Linux, `LD_LIBRARY_PATH` can be used in place of `SNOPTDIR`:
+On Linux and macOS, the platform library-path environment variables can be
+used in place of `SNOPTDIR`:
 
 ```
 export LD_LIBRARY_PATH=/path/to/snopt:$LD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH=/path/to/snopt:$DYLD_LIBRARY_PATH  # macOS
 ```
 
 ## Usage
@@ -71,6 +73,23 @@ The `snopt` API calls SNOPT's own `snMemB` memory estimator through the exported
 Pass solver options as a vector of pairs. Keys may be strings or symbols; symbol
 underscores are converted to spaces, so `:major_print_level => 0` is equivalent
 to `"Major print level" => 0`.
+
+Use `snlog` for SNOPT major-iteration trace output. The lower-level `callback`
+keyword receives objective and constraint evaluation events, which may occur
+several times per major iteration.
+
+```julia
+result = snopt(
+    eval_obj,
+    eval_grad!,
+    x0;
+    options = ["Major print level" => 1],
+    snlog = event -> begin
+        println("major $(event.major_iter): f = $(event.objective)")
+        true
+    end,
+)
+```
 
 For manual workspace sizing, call `snmemb` directly:
 

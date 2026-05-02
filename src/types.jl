@@ -31,7 +31,9 @@ mutable struct SnoptWorkspace
     end
 end
 
-mutable struct SnoptA{F<:Function}
+abstract type AbstractSnoptProblem end
+
+mutable struct SnoptA{F<:Function} <: AbstractSnoptProblem
     ws::SnoptWorkspace
     nf::Int                           # number of F rows: objective + constraints
     n::Int                            # number of design variables
@@ -59,7 +61,7 @@ mutable struct SnoptA{F<:Function}
     usrfun::F
 end
 
-mutable struct SnoptB{F1<:Function, F2<:Function}
+mutable struct SnoptB{F1<:Function, F2<:Function} <: AbstractSnoptProblem
     ws::SnoptWorkspace
     n::Int                            # num design variables
     nc::Int                           # num nonlinear constraints
@@ -78,7 +80,7 @@ end
 
 const SnoptProblem = SnoptB
 
-mutable struct SnoptC{F<:Function}
+mutable struct SnoptC{F<:Function} <: AbstractSnoptProblem
     ws::SnoptWorkspace
     n::Int                            # num design variables
     nc::Int                           # num nonlinear constraints

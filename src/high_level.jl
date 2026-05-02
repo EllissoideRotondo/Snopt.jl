@@ -1,13 +1,22 @@
+const SNOPT_INF = 1.0e20
+
+function snopt_bound_value(value)
+    value = Float64(value)
+    value == Inf && return SNOPT_INF
+    value == -Inf && return -SNOPT_INF
+    return value
+end
+
 function float_vector(values, name::AbstractString)
     values === nothing && throw(ArgumentError("$name must be provided"))
     values isa Number && throw(ArgumentError("$name must be a vector, not a scalar"))
-    return Float64.(collect(values))
+    return snopt_bound_value.(collect(values))
 end
 
 function bound_vector(values, n::Int, default::Float64, name::AbstractString)
     values === nothing && return fill(default, n)
-    values isa Number && return fill(Float64(values), n)
-    vector = Float64.(collect(values))
+    values isa Number && return fill(snopt_bound_value(values), n)
+    vector = snopt_bound_value.(collect(values))
     length(vector) == n ||
         throw(ArgumentError("$name must have length $n; got $(length(vector))"))
     return vector
@@ -96,8 +105,10 @@ Keyword arguments:
     constrained problem, a dense sparsity pattern is used.
   * `options`: SNOPT options as a vector of pairs, for example
     `["Major print level" => 0, :minor_print_level => 0]`.
-  * `callback`: optional callback receiving objective/constraint events.
+  * `callback`: optional callback receiving objective/constraint evaluation
+    events. Use this for evaluation-level monitoring or early termination.
   * `snlog`: optional callback receiving `SnoptMajorLog` major-iteration events.
+    Use this for trace/progress output with meaningful iteration counters.
 
 """
 
@@ -117,8 +128,8 @@ function snopt(eval_obj::Function, eval_grad::Function,
     x0_vector = Float64.(collect(x0))
     n = length(x0_vector)
     n > 0 || throw(ArgumentError("x0 must contain at least one variable"))
-    xlow = bound_vector(lb, n, -Inf, "lb")
-    xupp = bound_vector(ub, n, Inf, "ub")
+    xlow = bound_vector(lb, n, -SNOPT_INF, "lb")
+    xupp = bound_vector(ub, n, SNOPT_INF, "ub")
     nc, lcon_vector, ucon_vector =
         prepare_constraint_data(eval_con, eval_jac, lcon, ucon)
     m_eff = nc > 0 ? nc : 1
@@ -138,8 +149,8 @@ function snopt(eval_obj::Function, eval_grad::Function,
         confun = nc > 0 ? make_confun(eval_con, eval_jac, J32, ws.iw; callback) :
                           make_dummy_confun()
         x = [x0_vector; zeros(m_eff)]
-        bl = [xlow; nc > 0 ? lcon_vector : [-Inf]]
-        bu = [xupp; nc > 0 ? ucon_vector : [Inf]]
+        bl = [xlow; nc > 0 ? lcon_vector : [-SNOPT_INF]]
+        bu = [xupp; nc > 0 ? ucon_vector : [SNOPT_INF]]
         hs = zeros(Int32, n + m_eff)
         prob = SnoptB(ws, n, nc, m_eff, x, bl, bu, hs, J32,
                       0.0, 0, Float64[], objfun, confun)

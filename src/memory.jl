@@ -1,4 +1,4 @@
-const SNOPT_MEMORY_WORKSPACE = 500
+const SNOPT_MEMORY_WORKSPACE = 1000
 
 memory_estimate_success(info::Int) = info == 100 || info == 104
 

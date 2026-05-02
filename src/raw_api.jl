@@ -21,6 +21,9 @@ function read_options(prob::SnoptWorkspace, specsfile::String)
     return info
 end
 
+read_options(prob::AbstractSnoptProblem, specsfile::String) =
+    read_options(prob.ws, specsfile)
+
 function require_dimension(condition::Bool, message::AbstractString)
     condition || throw(DimensionMismatch(String(message)))
     return nothing

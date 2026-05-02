@@ -27,15 +27,19 @@ end
 
 SnoptCallbackState() = SnoptCallbackState(nothing)
 
-function register_callback_state!(callback, state::SnoptCallbackState)
-    return callback
+struct StatefulCallback{F} <: Function
+    f::F
+    state::SnoptCallbackState
 end
 
-function callback_state(callback)
-    hasfield(typeof(callback), :state) || return nothing
-    state = getfield(callback, :state)
-    return state isa SnoptCallbackState ? state : nothing
+(callback::StatefulCallback)(args...) = callback.f(args...)
+
+function register_callback_state!(callback, state::SnoptCallbackState)
+    return StatefulCallback(callback, state)
 end
+
+callback_state(callback::StatefulCallback) = callback.state
+callback_state(_) = nothing
 
 function record_callback_exception!(state::SnoptCallbackState, err)
     state.exception === nothing && (state.exception = err)

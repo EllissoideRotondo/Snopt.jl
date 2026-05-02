@@ -70,10 +70,28 @@ end
     @test ws2.leniw == 40000
     @test ws2.lenrw == 5000
     @test SnoptProblem === SnoptB
+    @test SnoptA <: AbstractSnoptProblem
+    @test SnoptB <: AbstractSnoptProblem
+    @test SnoptC <: AbstractSnoptProblem
+end
+
+@testset "Library discovery" begin
+    libdir = dirname(Snopt.libsnopt7)
+    original_path = get(ENV, "PATH", "")
+    withenv("SNOPTDIR" => libdir, "SNOPT_GFORTRAN_BINDIR" => "not-used") do
+        @test normpath(Snopt.find_snopt_lib()) == normpath(Snopt.libsnopt7)
+        @test get(ENV, "PATH", "") == original_path
+    end
+    mktempdir() do dir
+        withenv("SNOPTDIR" => dir) do
+            @test Snopt.find_snopt_lib() == ""
+        end
+    end
 end
 
 @testset "SNOPTB memory estimation" begin
     ws = make_ws()
+    @test Snopt.SNOPT_MEMORY_WORKSPACE >= 1000
     memory = snmemb(ws, 1, 2, 1, 0, 0, 0, 2)
     @test memory isa SnoptMemory
     @test memory.info == 104
@@ -157,6 +175,8 @@ end
         (g, x) -> begin g[1] = 2(x[1] - 1) end,
         ws.iw
     )
+    @test objfun isa Function
+    @test Snopt.callback_state(objfun) isa Snopt.SnoptCallbackState
     prob = make_unconstrained_prob(
         ws, [0.0], [-10.0], [10.0], objfun, make_dummy_confun()
     )
@@ -253,6 +273,15 @@ end
     ret = read_options(ws, file)
     @test ret == 101
     @test ws.status == 101
+    objfun = make_objfun(
+        x -> x[1]^2,
+        (g, x) -> begin g[1] = 2x[1] end,
+        ws.iw
+    )
+    prob = make_unconstrained_prob(
+        ws, [0.0], [-10.0], [10.0], objfun, make_dummy_confun()
+    )
+    @test read_options(prob, file) == 101
 end
 
 @testset "Low-level snopt API (unconstrained)" begin
@@ -348,6 +377,8 @@ end
     @test all(log -> length(log.x) == prob.n + prob.m_eff, logs)
     @test all(log -> length(log.hs) == prob.n + prob.m_eff, logs)
     @test any(log -> log.major_iter >= 0 && log.minor_iter >= 0, logs)
+    @test any(log -> log.major_iter > 0, logs)
+    @test logs[end].major_iter == prob.ws.major_itns
     @test minimum(abs(log.objective - prob.obj_val) for log in logs) <= 1e-6
 end
 

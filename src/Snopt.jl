@@ -8,39 +8,38 @@ using SparseArrays: SparseMatrixCSC, nnz
 # which is negligible overhead compared to any SNOPT solve.
 global libsnopt7::String = ""
 
-function path_sep()
-    return Sys.iswindows() ? ';' : ':'
-end
-
-function maybe_prepend_process_path!(dir::AbstractString)
-    isempty(dir) && return nothing
-    isdir(dir) || return nothing
-    sep = path_sep()
-    current = get(ENV, "PATH", "")
-    entries = isempty(current) ? String[] : split(current, sep)
-    dir in entries && return nothing
-    ENV["PATH"] = isempty(current) ? String(dir) : string(dir, sep, current)
-    return nothing
+function loadable_library_path(libpath::AbstractString)
+    isempty(libpath) && return ""
+    d = Libdl.dlopen_e(libpath)
+    d == C_NULL && return ""
+    Libdl.dlclose(d)
+    return String(libpath)
 end
 
 function find_snopt_lib()
     libname = string("lib", "snopt7", ".", Libdl.dlext)
+    snoptdir = get(ENV, "SNOPTDIR", "")
+    if !isempty(snoptdir)
+        return loadable_library_path(joinpath(snoptdir, libname))
+    end
+
     paths_to_try = String[]
     if Sys.iswindows()
         if haskey(ENV, "PATH")
             append!(paths_to_try, split(ENV["PATH"], ';'))
         end
-    elseif haskey(ENV, "LD_LIBRARY_PATH")
-        append!(paths_to_try, split(ENV["LD_LIBRARY_PATH"], ':'))
+    else
+        if haskey(ENV, "LD_LIBRARY_PATH")
+            append!(paths_to_try, split(ENV["LD_LIBRARY_PATH"], ':'))
+        end
+        if Sys.isapple() && haskey(ENV, "DYLD_LIBRARY_PATH")
+            append!(paths_to_try, split(ENV["DYLD_LIBRARY_PATH"], ':'))
+        end
     end
-    if haskey(ENV, "SNOPTDIR")
-        push!(paths_to_try, ENV["SNOPTDIR"])
-    end
-    for path in Iterators.reverse(paths_to_try)
-        libpath = joinpath(path, libname)
-        d = Libdl.dlopen_e(libpath)
-        if d != C_NULL
-            Libdl.dlclose(d)
+
+    for path in paths_to_try
+        libpath = loadable_library_path(joinpath(path, libname))
+        if !isempty(libpath)
             return libpath
         end
     end
@@ -48,16 +47,14 @@ function find_snopt_lib()
 end
 
 function __init__()
-    if Sys.iswindows()
-        haskey(ENV, "SNOPTDIR") && maybe_prepend_process_path!(ENV["SNOPTDIR"])
-        haskey(ENV, "SNOPT_GFORTRAN_BINDIR") && maybe_prepend_process_path!(ENV["SNOPT_GFORTRAN_BINDIR"])
-    end
     global libsnopt7 = find_snopt_lib()
     if isempty(libsnopt7)
         @warn """
               Snopt.jl: SNOPT library not found. has_snopt() returns false.
-              Set SNOPTDIR to the directory containing libsnopt7, or add it to LD_LIBRARY_PATH:
+              Set SNOPTDIR to the directory containing libsnopt7, or add it to the platform library path:
                   export SNOPTDIR=/path/to/snopt/lib
+                  export LD_LIBRARY_PATH=/path/to/snopt/lib:\$LD_LIBRARY_PATH
+                  export DYLD_LIBRARY_PATH=/path/to/snopt/lib:\$DYLD_LIBRARY_PATH  # macOS
               """
     else
         # Preload OpenMP companion library if it lives alongside libsnopt7.
@@ -80,6 +77,7 @@ include("raw_api.jl")
 export SnoptA
 export SnoptB
 export SnoptC
+export AbstractSnoptProblem
 export SnoptMajorLog
 export SnoptMemory
 export SnoptProblem
