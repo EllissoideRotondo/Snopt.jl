@@ -65,6 +65,11 @@ end
     @test ws.lenrw == 60000
     @test_throws ArgumentError SNOPT.SnoptWorkspace(0, 10)
     @test_throws ArgumentError SNOPT.SnoptWorkspace(10, 0)
+    # Workspaces below SNOPT's 500-element minimum let f_sninitx write out of
+    # bounds (heap corruption / segfault); they must be rejected up front.
+    @test_throws ArgumentError SNOPT.SnoptWorkspace(499, 1000)
+    @test_throws ArgumentError SNOPT.SnoptWorkspace(1000, 499)
+    @test_throws ArgumentError initialize("", "", 100, 100)
 
     ws2 = initialize("", "", 40000, 5000)
     @test ws2.leniw == 40000
@@ -100,6 +105,28 @@ end
     @test SnoptC <: AbstractSnoptProblem
 end
 
+@testset "Closed workspaces reject public operations" begin
+    ws = make_ws()
+    objfun = make_objfun(
+        x -> (x[1] - 1)^2,
+        (g, x) -> begin g[1] = 2(x[1] - 1) end,
+        ws.iw
+    )
+    prob = make_unconstrained_prob(
+        ws, [0.0], [-10.0], [10.0], objfun, make_dummy_confun()
+    )
+    specs = tempname()
+    write(specs, "Begin\n  Major print level 0\nEnd\n")
+
+    close(ws)
+    @test !isopen(ws)
+    @test_throws ArgumentError set_option!(ws, "Major print level", 0)
+    @test_throws ArgumentError SNOPT.apply_options!(ws, ["Major print level" => 0])
+    @test_throws ArgumentError snmemb(ws, 1, 1, 1, 0, 0, 1, 0)
+    @test_throws ArgumentError read_options(ws, specs)
+    @test_throws ArgumentError snopt!(prob)
+end
+
 @testset "Library discovery" begin
     libdir = dirname(SNOPT.libsnopt7)
     original_path = get(ENV, "PATH", "")
@@ -122,6 +149,18 @@ end
     @test memory.info == 104
     @test memory.miniw >= 500
     @test memory.minrw >= 500
+
+    @test_throws ArgumentError snmemb(ws, 0, 2, 1, 0, 0, 2, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 0, 1, 0, 0, 0, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 2, -1, 0, 0, 2, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, -1, 0, 2, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, 0, -1, 2, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, 0, 0, -1, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, 0, 0, 2, -1)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, 0, 0, 3, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, 0, 0, 2, 3)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, 0, 2, 2, 0)
+    @test_throws ArgumentError snmemb(ws, 1, 2, 1, 2, 0, 2, 0)
 
     memory2 = snmemb(2, 4, 8, 8, 2, 4, 4;
                      options = [
@@ -290,6 +329,38 @@ end
     @test SNOPT.active_snopt_callback_count() == 0
 end
 
+@testset "SnoptA finite-difference gradients (eval_G=nothing)" begin
+    ws = make_ws()
+    set_option!(ws, "Derivative option", 0)
+
+    # No eval_G: SNOPT must estimate the gradient by finite differences even
+    # though it still issues a needG>0 probe call.
+    usrfun = make_usrfun_a((F, x) -> begin F[1] = (x[1] - 2)^2 end)
+
+    prob = SnoptA(
+        ws,
+        1, 1,
+        0.0, 1,
+        Int32[], Int32[], Float64[],
+        Int32[1], Int32[1],
+        [-10.0], [10.0],
+        [-1.0e20], [1.0e20],
+        [0.0],
+        zeros(Int32, 1),
+        zeros(1),
+        zeros(1),
+        zeros(Int32, 1),
+        zeros(1),
+        0, 0, 0, 0.0,
+        usrfun
+    )
+
+    status = snopta!(prob)
+    @test status == 1
+    @test prob.x[1] ≈ 2.0 atol=1.0e-4
+    @test SNOPT.active_snopt_callback_count() == 0
+end
+
 @testset "SNOPT_STATUS dictionary" begin
     @test SNOPT.SNOPT_STATUS[1]   == :Solve_Succeeded
     @test SNOPT.SNOPT_STATUS[2]   == :Feasible_Point_Found
@@ -322,9 +393,37 @@ end
         ws, [0.0], [-10.0], [10.0], objfun, make_dummy_confun()
     )
     @test read_options(prob, file) == 101
+
+    # A missing specs file is reported clearly instead of as a SNOPT parse error.
+    @test_throws ArgumentError read_options(ws, joinpath(@__DIR__, "no_such_specsfile"))
 end
 
 @testset "Low-level snopt API (unconstrained)" begin
+    calls = Ref(0)
+    grad_calls = Ref(0)
+    stopped = snopt(
+        x -> (x[1] - 1)^2,
+        (g, x) -> begin
+            grad_calls[] += 1
+            g[1] = 2(x[1] - 1)
+        end,
+        [0.0];
+        options = [
+            "Major print level" => 0,
+            "Minor print level" => 0,
+        ],
+        callback = event -> begin
+            calls[] += 1
+            false
+        end
+    )
+    @test stopped.status == 71
+    @test stopped.status_symbol === :User_Requested_Stop
+    @test stopped.x == [0.0]
+    @test stopped.objective ≈ 1.0
+    @test calls[] == 1
+    @test grad_calls[] == 0
+
     result = snopt(
         x -> (x[1] - 1)^2 + (x[2] - 2)^2,
         (g, x) -> begin

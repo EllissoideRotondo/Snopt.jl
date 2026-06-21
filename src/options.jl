@@ -39,10 +39,12 @@ function apply_option!(ws::SnoptWorkspace, option::Pair)
 end
 
 function apply_options!(ws::SnoptWorkspace, options::Nothing)
+    require_open_workspace(ws, "apply_options!")
     return ws
 end
 
 function apply_options!(ws::SnoptWorkspace, options::AbstractVector{<:Pair})
+    require_open_workspace(ws, "apply_options!")
     for option in options
         apply_option!(ws, option)
     end
@@ -61,6 +63,7 @@ function check_option_errors(errors, label)
 end
 
 function set_option!(prob::SnoptWorkspace, optstring::String)
+    require_open_workspace(prob, "set_option!")
     isempty(strip(optstring)) &&
         throw(ArgumentError("SNOPT option string must not be empty or whitespace-only"))
     errors = Int32[0]
@@ -73,6 +76,7 @@ function set_option!(prob::SnoptWorkspace, optstring::String)
 end
 
 function set_option!(prob::SnoptWorkspace, keyword::String, value::Int)
+    require_open_workspace(prob, "set_option!")
     isempty(strip(keyword)) &&
         throw(ArgumentError("SNOPT option keyword must not be empty or whitespace-only"))
     errors = Int32[0]
@@ -85,6 +89,7 @@ function set_option!(prob::SnoptWorkspace, keyword::String, value::Int)
 end
 
 function set_option!(prob::SnoptWorkspace, keyword::String, value::Float64)
+    require_open_workspace(prob, "set_option!")
     isempty(strip(keyword)) &&
         throw(ArgumentError("SNOPT option keyword must not be empty or whitespace-only"))
     errors = Int32[0]

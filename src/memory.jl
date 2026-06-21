@@ -7,9 +7,28 @@ function check_memory_estimate(memory::SnoptMemory)
     throw(ErrorException("SNOPT memory estimator failed with info code $(memory.info)"))
 end
 
+function validate_snmemb_dimensions(m::Integer, n::Integer, neJ::Integer,
+                                    negCon::Integer, nnCon::Integer,
+                                    nnObj::Integer, nnJac::Integer)
+    m > 0 || throw(ArgumentError("m must be positive, got $m"))
+    n > 0 || throw(ArgumentError("n must be positive, got $n"))
+    neJ >= 0 || throw(ArgumentError("neJ must be nonnegative, got $neJ"))
+    negCon >= 0 || throw(ArgumentError("negCon must be nonnegative, got $negCon"))
+    nnCon >= 0 || throw(ArgumentError("nnCon must be nonnegative, got $nnCon"))
+    nnObj >= 0 || throw(ArgumentError("nnObj must be nonnegative, got $nnObj"))
+    nnJac >= 0 || throw(ArgumentError("nnJac must be nonnegative, got $nnJac"))
+    nnObj <= n || throw(ArgumentError("nnObj must be <= n, got nnObj=$nnObj and n=$n"))
+    nnJac <= n || throw(ArgumentError("nnJac must be <= n, got nnJac=$nnJac and n=$n"))
+    nnCon <= m || throw(ArgumentError("nnCon must be <= m, got nnCon=$nnCon and m=$m"))
+    negCon <= neJ || throw(ArgumentError("negCon must be <= neJ, got negCon=$negCon and neJ=$neJ"))
+    return nothing
+end
+
 function snmemb(ws::SnoptWorkspace, m::Integer, n::Integer, neJ::Integer,
                 negCon::Integer, nnCon::Integer, nnObj::Integer,
                 nnJac::Integer)
+    require_open_workspace(ws, "snmemb")
+    validate_snmemb_dimensions(m, n, neJ, negCon, nnCon, nnObj, nnJac)
     info  = Int32[0]
     miniw = Int32[0]
     minrw = Int32[0]

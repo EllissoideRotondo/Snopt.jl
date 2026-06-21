@@ -67,6 +67,12 @@ end
 Base.close(prob::SnoptWorkspace) = free!(prob)
 Base.isopen(prob::SnoptWorkspace) = !prob.finalized
 
+function require_open_workspace(prob::SnoptWorkspace, action::AbstractString)
+    isopen(prob) ||
+        throw(ArgumentError("$(action) requires an open SNOPT workspace"))
+    return prob
+end
+
 const IW_MINOR_ITNS = 421  # iw(421): cumulative minor iterations - SNOPT 7.7 iw layout
 
 const IW_MAJOR_ITNS = 422  # iw(422): cumulative major iterations - SNOPT 7.7 iw layout

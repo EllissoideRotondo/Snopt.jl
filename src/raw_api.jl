@@ -9,6 +9,9 @@ function specs_status_message(info::Int)
 end
 
 function read_options(prob::SnoptWorkspace, specsfile::String)
+    require_open_workspace(prob, "read_options")
+    isfile(specsfile) ||
+        throw(ArgumentError("read_options: specs file not found: $(repr(specsfile))"))
     status = Int32[0]
     ccall((:f_snspecf, libsnopt7), Cvoid,
           (Cstring, Cint, Ptr{Cint},
@@ -30,6 +33,7 @@ function require_dimension(condition::Bool, message::AbstractString)
 end
 
 function snopta!(prob::SnoptA; start::String = "Cold", name::String = "Julia")
+    require_open_workspace(prob.ws, "snopta!")
     require_dimension(
         prob.n == length(prob.x) == length(prob.xlow) == length(prob.xupp),
         "SnoptA variable arrays must all have length n=$(prob.n)")
@@ -116,6 +120,7 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
                  J::SparseMatrixCSC, bl::Vector{Float64}, bu::Vector{Float64},
                  hs::Vector{Int32}, x::Vector{Float64};
                  snlog=nothing)
+    require_open_workspace(prob, "snoptb!")
     total = n + m
     require_dimension(
         total == length(x) == length(bl) == length(bu),
@@ -221,6 +226,7 @@ end
 
 function snoptc!(prob::SnoptC; start::String = "Cold", name::String = "Julia",
                  snlog=nothing)
+    require_open_workspace(prob.ws, "snoptc!")
     total = prob.n + prob.m_eff
     require_dimension(
         total == length(prob.x) == length(prob.bl) == length(prob.bu),

@@ -612,10 +612,9 @@ objective/constraint row values. If derivatives are requested, `eval_G(G, x)`
 fills the nonlinear derivative values in the order specified by `iGfun` and
 `jGvar`. Returning `false` from `callback(event)` requests SNOPT termination.
 
-If `eval_G` is `nothing`, any gradient request from SNOPT sets `status = -1`
-and terminates the solve with `User_Supplied_Function_Error`. This is only
-valid when SNOPT is configured for finite-difference gradients via
-`set_option!(ws, "Derivative option", 0)`.
+If `eval_G` is `nothing`, gradient requests from SNOPT are left for SNOPT to
+fill by finite differences. This requires SNOPT to be configured for
+finite-difference gradients via `set_option!(ws, "Derivative option", 0)`.
 
 """
 
@@ -645,11 +644,7 @@ function make_usrfun_a(eval_F::Function; eval_G=nothing, callback=nothing)
                     end
                 end
             end
-            if needG > 0
-                if eval_G === nothing
-                    unsafe_store!(status_, Cint(-1))
-                    return
-                end
+            if needG > 0 && eval_G !== nothing
                 G = unsafe_wrap(Array, G_, neG)
                 eval_G(G, x)
             end

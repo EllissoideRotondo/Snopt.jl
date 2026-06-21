@@ -58,8 +58,10 @@ function __init__()
               """
     else
         # Preload OpenMP companion library if it lives alongside libsnopt7.
+        # Use the non-throwing dlopen so a missing or incompatible companion
+        # never aborts module initialization; libsnopt7 itself already loaded.
         libiomp5 = replace(libsnopt7, "libsnopt7" => "libiomp5")
-        isfile(libiomp5) && Libdl.dlopen(libiomp5)
+        isfile(libiomp5) && Libdl.dlopen_e(libiomp5)
     end
     init_callback_pointers!()
 end

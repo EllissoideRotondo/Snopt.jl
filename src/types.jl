@@ -20,8 +20,12 @@ mutable struct SnoptWorkspace
     major_itns::Int
     run_time::Float64
     function SnoptWorkspace(leniw::Int, lenrw::Int)
-        leniw > 0 || throw(ArgumentError("leniw must be positive"))
-        lenrw > 0 || throw(ArgumentError("lenrw must be positive"))
+        # SNOPT's sninit writes a fixed-size header into iw/rw and requires at
+        # least 500 elements in each. Smaller arrays let f_sninitx write out of
+        # bounds, which silently corrupts the heap and later segfaults, so reject
+        # them before any allocation reaches the Fortran side.
+        leniw >= 500 || throw(ArgumentError("leniw must be >= 500 (SNOPT work-array minimum), got $leniw"))
+        lenrw >= 500 || throw(ArgumentError("lenrw must be >= 500 (SNOPT work-array minimum), got $lenrw"))
         prob = new(0, false, 0, leniw, lenrw, String[],
                    zeros(Int32, leniw), zeros(Float64, lenrw),
                    0, 0,
