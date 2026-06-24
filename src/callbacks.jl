@@ -1,3 +1,9 @@
+"""
+    snopt_no_progress(event) -> true
+
+Default progress callback: accepts every event and never requests termination. Use it
+as an explicit "do nothing" value wherever a `callback`/`snlog` argument is expected.
+"""
 snopt_no_progress(event) = true
 
 workspace_value(ws_iw::Vector{Int32}, index::Int) =
@@ -410,7 +416,6 @@ SNOPT passes these arguments in the same order used by `snLog` in the SNOPT 7
 interface. The `@cfunction` signature in `snoptb!` must stay in this order.
 
 """
-
 function make_snlog(callback)
     state = SnoptCallbackState()
 
@@ -504,7 +509,6 @@ Objective events contain `kind = :objective`, `mode`, `major_iter`,
 `minor_iter`, `x`, and `f`.
 
 """
-
 function make_objfun(eval_obj::Function, eval_grad::Function,
                      ws_iw::Vector{Int32}; callback=nothing)
     state = SnoptCallbackState()
@@ -560,7 +564,6 @@ Constraint events contain `kind = :constraint`, `mode`, `major_iter`,
 per-evaluation event allocation.
 
 """
-
 function make_confun(eval_con::Function, eval_jac::Function, J,
                      ws_iw::Vector{Int32}; callback=nothing)
     state = SnoptCallbackState()
@@ -617,7 +620,6 @@ fill by finite differences. This requires SNOPT to be configured for
 finite-difference gradients via `set_option!(ws, "Derivative option", 0)`.
 
 """
-
 function make_usrfun_a(eval_F::Function; eval_G=nothing, callback=nothing)
     state = SnoptCallbackState()
 
@@ -663,7 +665,6 @@ Create the combined callback used by SNOPT-C. This is the SNOPT-C equivalent
 of `make_objfun` plus `make_confun`.
 
 """
-
 function make_usrfun_c(eval_obj::Function, eval_grad::Function,
                        eval_con::Function, eval_jac::Function, J,
                        ws_iw::Vector{Int32}; callback=nothing)
@@ -722,6 +723,13 @@ function make_usrfun_c(eval_obj::Function, eval_grad::Function,
     return make_usrfun_c(eval_obj, eval_grad, eval_con, eval_jac, J, Int32[])
 end
 
+"""
+    make_dummy_confun()
+
+Create a no-op SNOPT-B constraint callback for unconstrained problems (`nc == 0`).
+SNOPT still expects a constraint-function pointer even when there are no nonlinear
+constraints; this returns one that does nothing. Used internally by [`snopt`](@ref).
+"""
 function make_dummy_confun()
     function dummy_confun(_::Ptr{Cint}, _::Ptr{Cint}, _::Ptr{Cint}, _::Ptr{Cint},
                           _::Ptr{Cdouble}, _::Ptr{Cdouble}, _::Ptr{Cdouble},

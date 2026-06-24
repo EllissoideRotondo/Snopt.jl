@@ -55,6 +55,20 @@ function apply_options!(ws::SnoptWorkspace, options)
     throw(ArgumentError("SNOPT options must be a Vector of Pairs, got $(typeof(options))"))
 end
 
+"""
+    set_option!(prob, "Keyword string value")
+    set_option!(prob, "Keyword string", value::Integer)
+    set_option!(prob, "Keyword string", value::Real)
+
+Set a single SNOPT option on `prob` (a [`SnoptWorkspace`](@ref) or any
+[`AbstractSnoptProblem`](@ref)) by calling SNOPT's `snSet`/`snSeti`/`snSetr`, and
+return the number of parse errors SNOPT reported (always `0`, since a nonzero count
+throws). The one-string form sets keyword options such as
+`"Hessian limited memory"`; the two-argument forms set an integer or real value for a
+keyword such as `"Major iterations limit"`. For the high-level [`snopt`](@ref) entry
+point, pass options as a vector of pairs instead; see also [`read_options`](@ref) for
+loading a specs file.
+"""
 set_option!(prob::Union{SnoptA, SnoptB, SnoptC}, args...) = set_option!(prob.ws, args...)
 
 function check_option_errors(errors, label)

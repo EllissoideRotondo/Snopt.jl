@@ -156,7 +156,6 @@ Keyword arguments:
     Use this for trace/progress output with meaningful iteration counters.
 
 """
-
 function snopt(eval_obj::Function, eval_grad::Function,
                x0::AbstractVector{<:Real};
                lb=nothing, ub=nothing,

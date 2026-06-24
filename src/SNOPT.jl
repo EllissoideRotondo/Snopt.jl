@@ -16,6 +16,15 @@ function loadable_library_path(libpath::AbstractString)
     return String(libpath)
 end
 
+"""
+    find_snopt_lib() -> String
+
+Search for a loadable `libsnopt7` and return its absolute path, or an empty string
+if none is found. The search checks `SNOPTDIR` first, then the platform library
+path (`LD_LIBRARY_PATH`, also `DYLD_LIBRARY_PATH` on macOS, or `PATH` on Windows).
+This is run once during `__init__` to set the global `SNOPT.libsnopt7`; call it
+directly to diagnose why a library is not being picked up. See also [`has_snopt`](@ref).
+"""
 function find_snopt_lib()
     libname = string("lib", "snopt7", ".", Libdl.dlext)
     snoptdir = get(ENV, "SNOPTDIR", "")
@@ -66,6 +75,14 @@ function __init__()
     init_callback_pointers!()
 end
 
+"""
+    has_snopt() -> Bool
+
+Return `true` if a usable SNOPT library was located and loaded during module
+initialization. When this is `false`, the resolved path in the global
+`SNOPT.libsnopt7` is empty and any solve raises an error; see
+[`find_snopt_lib`](@ref) to diagnose.
+"""
 has_snopt() = !isempty(libsnopt7)
 
 include("types.jl")

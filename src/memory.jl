@@ -53,7 +53,6 @@ Initialize a temporary bootstrap workspace, apply any SNOPT options, and return
 the SNOPTB/SNOPTC memory estimate.
 
 """
-
 function snmemb(m::Integer, n::Integer, neJ::Integer, negCon::Integer,
                 nnCon::Integer, nnObj::Integer, nnJac::Integer;
                 options=nothing, printfile::String = "", summfile::String = "")

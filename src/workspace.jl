@@ -104,6 +104,15 @@ function snopt_output_files(printfile::String, summfile::String)
     return printpath, summpath, tempfiles
 end
 
+"""
+    SNOPT_STATUS
+
+Mapping from SNOPT integer inform codes to descriptive `Symbol`s (for example
+`1 => :Solve_Succeeded`, `31 => :Maximum_Iterations_Exceeded`,
+`11 => :Infeasible_Problem_Detected`). The `status_symbol` field of a
+[`SnoptResult`](@ref) is produced by looking the inform code up here, defaulting to
+`:Unknown_Status` for unmapped codes.
+"""
 const SNOPT_STATUS = Dict(
     1  => :Solve_Succeeded,
     2  => :Feasible_Point_Found,
@@ -170,7 +179,6 @@ The workspace is closed with `close(ws)` when the block exits, including if the
 block throws.
 
 """
-
 function initialize(printfile::String, summfile::String)
     initialize(printfile, summfile, 30500, 60000)
 end

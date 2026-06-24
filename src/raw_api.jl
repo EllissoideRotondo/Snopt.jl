@@ -1,3 +1,10 @@
+"""
+    specs_status_message(info::Int) -> String
+
+Return a human-readable description of the inform code returned by [`read_options`](@ref)
+when reading a SNOPT specs file (e.g. `101` is success; codes above `134` indicate that
+`info - 134` errors were found while parsing).
+"""
 function specs_status_message(info::Int)
     info == 101 && return "Specs file read successfully."
     info == 131 && return "No Specs file specified (iSpecs ≤ 0 or iSpecs > 99)."  # unreachable via f_snspecf filename path
@@ -8,6 +15,15 @@ function specs_status_message(info::Int)
     return "Unknown specs inform code: $info."
 end
 
+"""
+    read_options(prob, specsfile::String) -> Int
+
+Read a SNOPT specs (options) file into the workspace of `prob` (a
+[`SnoptWorkspace`](@ref) or any [`AbstractSnoptProblem`](@ref)) via SNOPT's `snSpecf`,
+and return the resulting inform code. A warning is emitted unless the file is read
+cleanly (`101`); see [`specs_status_message`](@ref) for the code meanings. Use this as
+an alternative to passing options programmatically through [`set_option!`](@ref).
+"""
 function read_options(prob::SnoptWorkspace, specsfile::String)
     require_open_workspace(prob, "read_options")
     isfile(specsfile) ||
@@ -32,6 +48,15 @@ function require_dimension(condition::Bool, message::AbstractString)
     return nothing
 end
 
+"""
+    snopta!(prob::SnoptA; start="Cold", name="Julia") -> Int
+
+Solve a [`SnoptA`](@ref) problem in place through SNOPT's `snOptA` interface and
+return the SNOPT inform code. The final point is written into `prob.x`, multipliers
+into `prob.xmul`/`prob.Fmul`, and the row values into `prob.F`. If the problem was
+built without a derivative function, SNOPT must be configured for finite-difference
+gradients (`set_option!(ws, "Derivative option", 0)`).
+"""
 function snopta!(prob::SnoptA; start::String = "Cold", name::String = "Julia")
     require_open_workspace(prob.ws, "snopta!")
     require_dimension(
@@ -224,6 +249,14 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
     return Int(prob.status)
 end
 
+"""
+    snoptc!(prob::SnoptC; start="Cold", name="Julia", snlog=nothing) -> Int
+
+Solve a [`SnoptC`](@ref) problem in place through SNOPT's `snOptC` interface and
+return the SNOPT inform code. The final point, objective, and multipliers are written
+back into `prob`. Pass `snlog` to receive a [`SnoptMajorLog`](@ref) at each major
+iteration (routing the solve through SNOPT's `snKerC` kernel).
+"""
 function snoptc!(prob::SnoptC; start::String = "Cold", name::String = "Julia",
                  snlog=nothing)
     require_open_workspace(prob.ws, "snoptc!")
