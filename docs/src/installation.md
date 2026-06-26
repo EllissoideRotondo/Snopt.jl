@@ -23,7 +23,7 @@ You must supply a SNOPT shared library built for your platform:
 | Platform | Library file     |
 |----------|------------------|
 | Linux    | `libsnopt7.so`   |
-| macOS    | `libsnopt7.dylib`|
+| macOS Intel | `libsnopt7.dylib`|
 | Windows  | `libsnopt7.dll`  |
 
 The most reliable way to point the package at it is the `SNOPTDIR` environment
@@ -33,8 +33,8 @@ variable, set to the **directory** that contains the library:
 export SNOPTDIR=/path/to/snopt/lib
 ```
 
-On Linux and macOS, the platform library-path variables are also searched if
-`SNOPTDIR` is unset:
+`SNOPTDIR` is the recommended setup on Linux and macOS. If it is unset, SNOPT.jl
+also searches the platform library-path variables:
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/snopt/lib:$LD_LIBRARY_PATH
@@ -64,7 +64,11 @@ SNOPT.find_snopt_lib()   # re-run the search to diagnose path problems
 
 ## Platform notes
 
-**Linux** and **macOS** work out of the box with a compatible `libsnopt7`.
+**Linux** is tested with a compatible `libsnopt7`.
+
+**macOS on Intel** should work with a compatible x86_64 `libsnopt7.dylib`, but it
+has not been tested by the maintainers. Apple Silicon is not currently tested or
+supported.
 
 **Windows** requires a `libsnopt7.dll` compiled from the SNOPT Fortran source
 with [MinGW](https://www.mingw-w64.org/); the Intel-compiled distribution is not

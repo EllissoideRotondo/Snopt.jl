@@ -18,9 +18,8 @@ l \le \begin{pmatrix} x \\ c(x) \end{pmatrix} \le u,
 where ``f`` and the constraint functions ``c`` are smooth and may be nonlinear.
 
 The package exposes all three SNOPT Fortran entry points — `snOptA`, `snOptB`,
-and `snOptC` — through Julia callbacks, and adds a single high-level [`snopt`](@ref)
-function that covers the common case (objective + gradient, optional sparse
-nonlinear constraints).
+and `snOptC` — through Julia callbacks, and provides [`snopt`](@ref) as the main
+Julia-facing entry point.
 
 !!! note "Commercial solver required"
     SNOPT itself is closed-source commercial software. You must obtain a
@@ -29,9 +28,8 @@ nonlinear constraints).
     See [Installation](@ref).
 
 !!! note "Concurrency"
-    SNOPT.jl supports one active SNOPT solve at a time per Julia process.
-    Sequential solves are supported, but concurrent solves from multiple Julia
-    threads are not. Use separate Julia processes for parallel independent solves.
+    SNOPT solves are process-serial: run one solve at a time per Julia process,
+    and use multiple Julia processes for parallel solves.
 
 ## Quick start
 
@@ -63,7 +61,6 @@ result.objective       # ≈ 0.0
 ## Relationship to Optimization.jl
 
 For modeling-first workflows, SNOPT is intended to be used through
-[Optimization.jl](https://github.com/SciML/Optimization.jl) via the
-[OptimizationSNOPT.jl](https://github.com/EllissoideRotondo/OptimizationSNOPT.jl)
-adapter, which handles automatic differentiation and problem assembly. That
-adapter is a **work in progress**; see [Optimization.jl integration](@ref).
+[Optimization.jl](https://github.com/SciML/Optimization.jl), which will handle
+automatic differentiation and problem assembly. That support is a **work in
+progress**; see [Optimization.jl integration](@ref).

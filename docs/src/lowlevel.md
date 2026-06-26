@@ -36,11 +36,9 @@ end
 ```
 
 !!! warning "One active solve per process"
-    SNOPT.jl supports one active SNOPT solve at a time per Julia process.
-    Sequential solves are supported, but concurrent solves from multiple Julia
-    threads are not. Creating multiple [`SnoptWorkspace`](@ref) objects does not
-    make independent solver sessions. For parallel independent solves, use
-    separate Julia processes.
+    SNOPT solves are process-serial: run one solve at a time per Julia process,
+    and use multiple Julia processes for parallel solves. Creating multiple
+    [`SnoptWorkspace`](@ref) objects does not make independent solver sessions.
 
     When [`initialize`](@ref) is called again, SNOPT.jl closes the previous active
     workspace before creating the new one. Use the high-level [`snopt`](@ref)

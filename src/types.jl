@@ -8,12 +8,11 @@ requires each work array to hold at least 500 elements; smaller requests are rej
 A workspace is normally managed for you by [`snopt`](@ref); use it directly only when
 driving the low-level [`SnoptA`](@ref)/[`SnoptB`](@ref)/[`SnoptC`](@ref) entry points.
 
-SNOPT.jl supports one active SNOPT solve at a time per Julia process. Sequential
-solves are supported, but concurrent solves from multiple Julia threads are not.
-Creating multiple `SnoptWorkspace` objects does not make independent solver
-sessions; use separate Julia processes for parallel independent solves. Calling
-[`initialize`](@ref) again closes any previous active workspace before creating
-the new one.
+SNOPT solves are process-serial: run one solve at a time per Julia process, and
+use multiple Julia processes for parallel solves. Creating multiple
+`SnoptWorkspace` objects does not make independent solver sessions. Calling
+[`initialize`](@ref) again closes any previous active workspace before creating the
+new one.
 """
 mutable struct SnoptWorkspace
     status::Int

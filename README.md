@@ -6,8 +6,8 @@
 [SNOPT.jl](https://github.com/EllissoideRotondo/SNOPT.jl) is an unofficial Julia wrapper for
 [SNOPT](https://ccom.ucsd.edu/~optimizers/solvers/snopt/), the sparse nonlinear
 optimizer for large-scale constrained problems. It exposes SNOPT's `snOptA`,
-`snOptB`, and `snOptC` interfaces through Julia callbacks, plus a single
-high-level `snopt` entry point for the common case.
+`snOptB`, and `snOptC` interfaces through Julia callbacks, and provides `snopt`
+as the main Julia-facing entry point.
 
 ## License
 
@@ -19,7 +19,7 @@ binaries are **not** distributed with this package.
 ## Installation
 
 `SNOPT.jl` needs a SNOPT shared library (`libsnopt7.so` on Linux,
-`libsnopt7.dylib` on macOS, `libsnopt7.dll` on Windows). Set the `SNOPTDIR`
+`libsnopt7.dylib` on Intel macOS, `libsnopt7.dll` on Windows). Set the `SNOPTDIR`
 environment variable to the directory containing it, then add the package:
 
 ```julia
@@ -30,7 +30,8 @@ using SNOPT
 SNOPT.has_snopt()   # true once the library is found
 ```
 
-On Linux and macOS the platform library-path variables work in place of `SNOPTDIR`:
+`SNOPTDIR` is the recommended setup on Linux and macOS. If it is unset, SNOPT.jl
+also searches the platform library-path variables:
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/snopt:$LD_LIBRARY_PATH
@@ -40,17 +41,15 @@ export DYLD_LIBRARY_PATH=/path/to/snopt:$DYLD_LIBRARY_PATH   # macOS
 If the library is not found, the package still loads; `has_snopt()` returns
 `false` and solves raise an informative error.
 
-SNOPT.jl supports one active SNOPT solve at a time per Julia process. Sequential
-solves are supported, but concurrent solves from multiple Julia threads are not;
-use separate Julia processes for parallel independent solves.
+SNOPT solves are process-serial: run one solve at a time per Julia process, and
+use multiple Julia processes for parallel solves.
 
 ## Usage
 
-For most modeling workflows, use SNOPT through
-[Optimization.jl](https://github.com/SciML/Optimization.jl) via the
-[OptimizationSNOPT.jl](https://github.com/EllissoideRotondo/OptimizationSNOPT.jl)
-adapter (**work in progress**). `SNOPT.jl` itself provides a compact low-level API
-for driving SNOPT directly with Julia callbacks.
+For most modeling workflows, the preferred interface will be
+[Optimization.jl](https://github.com/SciML/Optimization.jl). Support for that
+interface is currently in progress. `SNOPT.jl` itself provides a compact API for
+driving SNOPT directly with Julia callbacks.
 
 The main entry point is `snopt`, which solves a problem through SNOPT's `snOptB`
 interface. You supply an objective `f(x)`, its gradient `g!(g, x)`, and a starting
@@ -107,7 +106,11 @@ problems.
 
 ## Platform support
 
-**Linux** and **macOS** work out of the box with a compatible `libsnopt7`.
+**Linux** is tested with a compatible `libsnopt7`.
+
+**macOS on Intel** should work with a compatible x86_64 `libsnopt7.dylib`, but it
+has not been tested by the maintainers. Apple Silicon is not currently tested or
+supported.
 
 **Windows** requires a `libsnopt7.dll` built from the SNOPT source with
 [MinGW](https://www.mingw-w64.org/) (the Intel-compiled distribution is not
