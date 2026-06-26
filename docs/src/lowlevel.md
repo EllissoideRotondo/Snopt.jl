@@ -35,6 +35,18 @@ initialize("", "") do ws
 end
 ```
 
+!!! warning "One active solve per process"
+    SNOPT.jl supports one active SNOPT solve at a time per Julia process.
+    Sequential solves are supported, but concurrent solves from multiple Julia
+    threads are not. Creating multiple [`SnoptWorkspace`](@ref) objects does not
+    make independent solver sessions. For parallel independent solves, use
+    separate Julia processes.
+
+    When [`initialize`](@ref) is called again, SNOPT.jl closes the previous active
+    workspace before creating the new one. Use the high-level [`snopt`](@ref)
+    entry point or an `initialize do` block unless you specifically need to
+    manage a workspace yourself.
+
 For larger problems, size the work arrays explicitly. A reasonable rule of thumb is
 
 ```julia
@@ -101,7 +113,7 @@ signatures SNOPT expects:
 | [`make_dummy_confun`](@ref) | `snOptB` | no-op constraints for unconstrained problems |
 | [`make_usrfun_c`](@ref) | `snOptC` | combined objective + constraint evaluation |
 | [`make_usrfun_a`](@ref) | `snOptA` | `eval_F(F, x)` and optional `eval_G(G, x)` |
-| [`make_snlog`](@ref) | all | a `snLog` hook delivering [`SnoptMajorLog`](@ref) events |
+| [`make_snlog`](@ref) | `snOptB`/`snOptC` | a `snLog` hook delivering [`SnoptMajorLog`](@ref) events |
 
 The problem-evaluating builders ([`make_objfun`](@ref), [`make_confun`](@ref),
 [`make_usrfun_a`](@ref), [`make_usrfun_c`](@ref)) take a `callback` keyword for
@@ -143,4 +155,3 @@ end
 In practice, prefer [`snopt`](@ref) unless you specifically need this level of
 control — it performs exactly this assembly, with validation and automatic
 workspace sizing.
-</content>

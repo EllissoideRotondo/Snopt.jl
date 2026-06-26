@@ -57,7 +57,7 @@ result = snopt(
     eval_con = constraints!,
     eval_jac = jacobian!,
     lcon = [25.0, 40.0],
-    ucon = [1.0e20, 40.0],
+    ucon = [Inf, 40.0],
     J,
     options = [
         "Major print level" => 1,

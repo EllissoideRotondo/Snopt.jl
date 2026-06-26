@@ -4,7 +4,7 @@ CurrentModule = SNOPT
 
 # SNOPT.jl
 
-[SNOPT.jl](https://github.com/EllissoideRotondo/SNOPT.jl) is a Julia wrapper for
+[SNOPT.jl](https://github.com/EllissoideRotondo/SNOPT.jl) is an unofficial Julia wrapper for
 [SNOPT](https://ccom.ucsd.edu/~optimizers/solvers/snopt/) (Sparse Nonlinear
 OPTimizer), a sequential quadratic programming (SQP) solver for smooth,
 large-scale, sparsely constrained nonlinear optimization problems of the form
@@ -27,6 +27,11 @@ nonlinear constraints).
     [SNOPT license](https://ccom.ucsd.edu/~optimizers/solvers/snopt/) and a built
     `libsnopt7` shared library separately; it is **not** bundled with this package.
     See [Installation](@ref).
+
+!!! note "Concurrency"
+    SNOPT.jl supports one active SNOPT solve at a time per Julia process.
+    Sequential solves are supported, but concurrent solves from multiple Julia
+    threads are not. Use separate Julia processes for parallel independent solves.
 
 ## Quick start
 
@@ -62,4 +67,3 @@ For modeling-first workflows, SNOPT is intended to be used through
 [OptimizationSNOPT.jl](https://github.com/EllissoideRotondo/OptimizationSNOPT.jl)
 adapter, which handles automatic differentiation and problem assembly. That
 adapter is a **work in progress**; see [Optimization.jl integration](@ref).
-</content>

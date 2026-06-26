@@ -57,4 +57,3 @@ Jacobian callbacks by hand.
 
 Refer to the OptimizationSNOPT.jl repository for its current status, installation,
 and the authoritative description of `SnoptOptimizer`.
-</content>

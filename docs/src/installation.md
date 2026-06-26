@@ -71,4 +71,3 @@ with [MinGW](https://www.mingw-w64.org/); the Intel-compiled distribution is not
 ABI-compatible with the `ccall` signatures this package uses. If recompiling is
 not practical, running under [WSL](https://learn.microsoft.com/en-us/windows/wsl/)
 with the Linux library is a working alternative.
-</content>

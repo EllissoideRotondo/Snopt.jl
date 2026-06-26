@@ -138,10 +138,17 @@ end
 
 """
     snopt(eval_obj, eval_grad, x0; kwargs...) -> SnoptResult
-Solve a nonlinear optimization problem with SNOPTB using Julia callbacks.
+
+Solve a nonlinear optimization problem through SNOPT's `snOptB` interface using
+Julia callbacks.
+
 `eval_obj(x)` returns the scalar objective and `eval_grad(g, x)` fills the
-objective gradient.
+objective gradient. The high-level interface always requires this gradient
+callback. For constrained problems, it also requires `eval_jac`; use the low-level
+[`SnoptA`](@ref) interface if you want SNOPT to finite-difference derivatives.
+
 Keyword arguments:
+
   * `lb`, `ub`: variable lower/upper bounds; scalars are broadcast.
   * `eval_con`, `eval_jac`, `lcon`, `ucon`: optional nonlinear constraints.
     `eval_con(c, x)` fills constraint values and `eval_jac(jnz, x)` fills the

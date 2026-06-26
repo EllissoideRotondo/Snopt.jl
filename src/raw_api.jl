@@ -149,10 +149,10 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
     total = n + m
     require_dimension(
         total == length(x) == length(bl) == length(bu),
-        "SNOPTB x, lower-bound, and upper-bound arrays must have length n + m = $total")
+        "snOptB x, lower-bound, and upper-bound arrays must have length n + m = $total")
     require_dimension(
         total == length(hs),
-        "SNOPTB basis-status array must have length n + m = $total")
+        "snOptB basis-status array must have length n + m = $total")
     prob.iu = Int32[0]
     prob.ru = [0.0]
     prob.x      = copy(x)

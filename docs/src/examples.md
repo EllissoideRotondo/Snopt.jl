@@ -96,7 +96,7 @@ result = snopt(
     objective, gradient!, [1.0, 5.0, 5.0, 1.0];
     lb = ones(4), ub = 5 * ones(4),
     eval_con = constraints!, eval_jac = jacobian!,
-    lcon = [25.0, 40.0], ucon = [1.0e20, 40.0],   # c1 ≥ 25 ; c2 = 40
+    lcon = [25.0, 40.0], ucon = [Inf, 40.0],   # c1 >= 25; c2 = 40
     J = J,
     options = ["Major print level" => 1, "Minor print level" => 0],
 )
@@ -108,5 +108,4 @@ println("x*     : ", result.x)
 
 The equality constraint ``c_2 = 40`` is encoded by setting `lcon[2] == ucon[2] ==
 40`, and the inequality ``c_1 \ge 25`` by an upper bound at SNOPT's infinity
-sentinel `1e20`.
-</content>
+sentinel, which the high-level wrapper accepts as `Inf`.

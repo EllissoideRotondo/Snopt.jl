@@ -49,8 +49,14 @@ end
 """
     snmemb(m, n, neJ, negCon, nnCon, nnObj, nnJac; options=nothing,
            printfile="", summfile="")
+
 Initialize a temporary bootstrap workspace, apply any SNOPT options, and return
-the SNOPTB/SNOPTC memory estimate.
+the `snOptB`/`snOptC` memory estimate as a [`SnoptMemory`](@ref).
+
+The dimensions match SNOPT's `snMemB` arguments: `m` total constraint rows, `n`
+variables, `neJ` Jacobian nonzeros, `negCon` nonlinear constraint Jacobian
+nonzeros, `nnCon` nonlinear constraints, `nnObj` nonlinear objective variables,
+and `nnJac` variables that appear nonlinearly in the constraint Jacobian.
 
 """
 function snmemb(m::Integer, n::Integer, neJ::Integer, negCon::Integer,

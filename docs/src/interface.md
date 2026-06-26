@@ -57,7 +57,7 @@ J = sparse(Int32[1,2,1,2,1,2,1,2], Int32[1,1,2,2,3,3,4,4], ones(8), 2, 4)
 
 snopt(f, g!, x0;
     eval_con = c!, eval_jac = jac!,
-    lcon = [25.0, 40.0], ucon = [1e20, 40.0], J = J)
+    lcon = [25.0, 40.0], ucon = [Inf, 40.0], J = J)
 ```
 
 Equality constraints are expressed by setting the matching entries of `lcon` and
@@ -86,7 +86,12 @@ A few commonly used keywords:
 | `"Major iterations limit"` | SQP iteration cap |
 | `"Major optimality tolerance"` | convergence tolerance |
 | `"Major feasibility tolerance"` | constraint tolerance |
-| `"Derivative option"` | `1` if you supply all gradients, `0` for finite differences |
+| `"Derivative option"` | SNOPT derivative-checking mode; the high-level API still requires `eval_grad` and, for constrained problems, `eval_jac` |
+
+The high-level [`snopt`](@ref) function always asks you for derivative callbacks.
+If you want SNOPT to finite-difference derivatives, use the low-level
+[`SnoptA`](@ref) path with [`make_usrfun_a`](@ref) and configure
+`"Derivative option"` there.
 
 ## Monitoring and early termination
 
@@ -106,7 +111,7 @@ Returning `false` from either hook requests SNOPT to stop; the resulting
 ```julia
 snopt(f, g!, x0;
     snlog = ev -> (println("major $(ev.major_iter): f = $(ev.objective)"); true),
-    callback = ev -> ev.f < 1e6,   # bail out if the objective blows up
+    callback = ev -> ev.kind === :objective ? ev.f < 1e6 : true,
 )
 ```
 
@@ -128,7 +133,7 @@ result.status          # SNOPT inform code (Int)
 result.status_symbol   # Symbol, e.g. :Solve_Succeeded (see SNOPT_STATUS)
 result.objective       # final objective value
 result.x               # final variable values (length n)
-result.lambda          # Lagrange multipliers (variables and constraints)
+result.lambda          # multipliers for variables, then nonlinear constraints
 result.num_inf         # number of remaining infeasibilities
 result.sum_inf         # sum of infeasibilities
 result.iterations      # total minor iterations
@@ -138,4 +143,3 @@ result.memory          # the SnoptMemory estimate used to size the workspace
 ```
 
 Map an inform code to its symbolic meaning through [`SNOPT_STATUS`](@ref).
-</content>

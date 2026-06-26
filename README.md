@@ -3,7 +3,7 @@
 [![CI](https://github.com/EllissoideRotondo/SNOPT.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/EllissoideRotondo/SNOPT.jl/actions/workflows/CI.yml)
 [![docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://EllissoideRotondo.github.io/SNOPT.jl/stable)
 
-[SNOPT.jl](https://github.com/EllissoideRotondo/SNOPT.jl) is a Julia wrapper for
+[SNOPT.jl](https://github.com/EllissoideRotondo/SNOPT.jl) is an unofficial Julia wrapper for
 [SNOPT](https://ccom.ucsd.edu/~optimizers/solvers/snopt/), the sparse nonlinear
 optimizer for large-scale constrained problems. It exposes SNOPT's `snOptA`,
 `snOptB`, and `snOptC` interfaces through Julia callbacks, plus a single
@@ -39,6 +39,10 @@ export DYLD_LIBRARY_PATH=/path/to/snopt:$DYLD_LIBRARY_PATH   # macOS
 
 If the library is not found, the package still loads; `has_snopt()` returns
 `false` and solves raise an informative error.
+
+SNOPT.jl supports one active SNOPT solve at a time per Julia process. Sequential
+solves are supported, but concurrent solves from multiple Julia threads are not;
+use separate Julia processes for parallel independent solves.
 
 ## Usage
 
@@ -117,4 +121,3 @@ This package draws on prior Julia SNOPT wrappers:
 - [snopt/SNOPT7.jl](https://github.com/snopt/SNOPT7.jl)
 - [byuflowlab/Snopt.jl](https://github.com/byuflowlab/Snopt.jl)
 - [Yuricst/joptimise](https://github.com/Yuricst/joptimise)
-</content>

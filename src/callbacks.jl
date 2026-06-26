@@ -409,11 +409,12 @@ end
 
 """
     make_snlog(callback)
+
 Create a Julia callback compatible with SNOPT's `snLog` hook. `callback` is
 called with a [`SnoptMajorLog`](@ref) after each major-iteration log event.
-Returning `false` requests termination from SNOPT.
-SNOPT passes these arguments in the same order used by `snLog` in the SNOPT 7
-interface. The `@cfunction` signature in `snoptb!` must stay in this order.
+Returning `false` requests termination from SNOPT; any other return value lets
+SNOPT continue. The `snlog` hook is available for [`SnoptB`](@ref) and
+[`SnoptC`](@ref) solves.
 
 """
 function make_snlog(callback)
@@ -661,8 +662,16 @@ end
 
 """
     make_usrfun_c(eval_obj, eval_grad, eval_con, eval_jac, J, ws_iw; callback=nothing)
+
 Create the combined callback used by SNOPT-C. This is the SNOPT-C equivalent
-of `make_objfun` plus `make_confun`.
+of [`make_objfun`](@ref) plus [`make_confun`](@ref): `eval_obj(x)` returns the
+objective, `eval_grad(g, x)` fills the objective gradient, `eval_con(c, x)` fills
+constraint values, and `eval_jac(jnz, x)` fills the nonlinear constraint Jacobian
+nonzeros in the column-major order of `J`.
+
+If `callback` is provided, it is called with a combined evaluation event containing
+`kind = :combined`, `mode`, `major_iter`, `minor_iter`, `x`, `f`, and `c`.
+Returning `false` requests SNOPT termination.
 
 """
 function make_usrfun_c(eval_obj::Function, eval_grad::Function,

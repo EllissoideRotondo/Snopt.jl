@@ -57,15 +57,7 @@ end
 
 function __init__()
     global libsnopt7 = find_snopt_lib()
-    if isempty(libsnopt7)
-        @warn """
-              SNOPT.jl: SNOPT library not found. has_snopt() returns false.
-              Set SNOPTDIR to the directory containing libsnopt7, or add it to the platform library path:
-                  export SNOPTDIR=/path/to/snopt/lib
-                  export LD_LIBRARY_PATH=/path/to/snopt/lib:\$LD_LIBRARY_PATH
-                  export DYLD_LIBRARY_PATH=/path/to/snopt/lib:\$DYLD_LIBRARY_PATH  # macOS
-              """
-    else
+    if !isempty(libsnopt7)
         # Preload OpenMP companion library if it lives alongside libsnopt7.
         # Use the non-throwing dlopen so a missing or incompatible companion
         # never aborts module initialization; libsnopt7 itself already loaded.
@@ -80,7 +72,8 @@ end
 
 Return `true` if a usable SNOPT library was located and loaded during module
 initialization. When this is `false`, the resolved path in the global
-`SNOPT.libsnopt7` is empty and any solve raises an error; see
+`SNOPT.libsnopt7` is empty and any solve raises an error explaining how to provide
+the library; see
 [`find_snopt_lib`](@ref) to diagnose.
 """
 has_snopt() = !isempty(libsnopt7)

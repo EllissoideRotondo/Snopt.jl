@@ -67,4 +67,3 @@ SNOPT.has_snopt
 SNOPT.find_snopt_lib
 SNOPT.SnoptWorkspace
 ```
-</content>

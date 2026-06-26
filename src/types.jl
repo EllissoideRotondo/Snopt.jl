@@ -7,6 +7,13 @@ SNOPT's `sninit`, and released by `close`/`free!`, which calls SNOPT's `snend`. 
 requires each work array to hold at least 500 elements; smaller requests are rejected.
 A workspace is normally managed for you by [`snopt`](@ref); use it directly only when
 driving the low-level [`SnoptA`](@ref)/[`SnoptB`](@ref)/[`SnoptC`](@ref) entry points.
+
+SNOPT.jl supports one active SNOPT solve at a time per Julia process. Sequential
+solves are supported, but concurrent solves from multiple Julia threads are not.
+Creating multiple `SnoptWorkspace` objects does not make independent solver
+sessions; use separate Julia processes for parallel independent solves. Calling
+[`initialize`](@ref) again closes any previous active workspace before creating
+the new one.
 """
 mutable struct SnoptWorkspace
     status::Int
@@ -178,7 +185,9 @@ Outcome of a high-level [`snopt`](@ref) solve. Fields:
   * `status_symbol`: symbolic interpretation of `status`, e.g. `:Solve_Succeeded`.
   * `objective`: final objective value.
   * `x`: final values of the `n` design variables.
-  * `lambda`: Lagrange multipliers for the variables and constraints.
+  * `lambda`: Lagrange multipliers for the variables followed by the nonlinear
+    constraints, in the same order as `[x; c(x)]` in SNOPT's extended problem.
+    Active lower-bound multipliers are positive in SNOPT's convention.
   * `num_inf`, `sum_inf`: number and sum of constraint infeasibilities.
   * `iterations`, `major_itns`: total minor and major iteration counts.
   * `run_time`: SNOPT-reported solve time in seconds.
@@ -207,7 +216,23 @@ It mirrors the quantities SNOPT prints on its major-iteration log line —
 iteration counters, objective and merit-function values, primal/dual
 infeasibilities, step length, penalty and Hessian-condition estimates — and also
 exposes the current point `x`, constraint values `fcon`, and multipliers `ycon`.
-Return `false`/`true` from the callback to request or decline early termination.
+
+Important fields:
+
+  * `iteration`, `major_iter`, `minor_iter`: SNOPT iteration counters.
+  * `objective`, `merit`: objective and merit-function values including any
+    objective offset and linear objective row.
+  * `f_objective`, `f_merit`: nonlinear objective and merit-function components
+    reported by SNOPT before adding the offset/linear objective row.
+  * `primal_infeasibility`, `dual_infeasibility`, `max_violation`,
+    `relative_violation`: feasibility and optimality diagnostics from SNOPT's log.
+  * `step`, `penalty_norm`, `condition_hessian`: step and algorithm diagnostics.
+  * `x`: the current extended SNOPT point, including design variables and slacks.
+  * `fcon`, `fx`, `ycon`: nonlinear constraint values, row values, and multipliers.
+  * `hs`: SNOPT basis-state array for the extended variables.
+
+Return `false` from the callback to request early termination; any other return
+value lets SNOPT continue.
 """
 struct SnoptMajorLog
     iteration::Int
