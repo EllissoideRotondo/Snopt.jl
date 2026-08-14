@@ -91,6 +91,30 @@ const SNOPT_DEVNULL = Sys.iswindows() ? "" : "/dev/null"
 
 snopt_output_file(path::String) = isempty(path) ? SNOPT_DEVNULL : path
 
+# SNOPT wants a real, writable file for the summary channel. Routing both
+# channels to the null device instead is not a safe fallback: the Linux library
+# then becomes stateful across mixed solves and later solves fail with status 82
+# (insufficient storage). So try a sequence of writable locations and, if every
+# one fails, raise here rather than start a session that is quietly broken.
+#
+# Creating the file eagerly is what makes an unwritable directory surface now
+# instead of inside f_sninitx, which reports nothing.
+function scratch_summary_file()
+    attempts = String[]
+    for dir in (nothing, homedir(), pwd())
+        try
+            path, io = dir === nothing ? mktemp() : mktemp(dir)
+            close(io)
+            return path
+        catch err
+            push!(attempts, something(dir, get(ENV, "TMPDIR", tempdir())))
+        end
+    end
+    error("SNOPT.jl could not create a scratch summary file in any of: " *
+          join(repr.(attempts), ", ") * ". SNOPT needs one writable output " *
+          "file; pass an explicit `summfile` to choose the location yourself.")
+end
+
 function snopt_output_files(printfile::String, summfile::String)
     printpath = snopt_output_file(printfile)
     summpath = snopt_output_file(summfile)
@@ -100,7 +124,7 @@ function snopt_output_files(printfile::String, summfile::String)
         # SNOPT output channels are opened on the null device across mixed solves.
         # Keep the print channel suppressed and give the summary channel a real,
         # throwaway file.
-        summpath = tempname()
+        summpath = scratch_summary_file()
         push!(tempfiles, summpath)
     end
     return printpath, summpath, tempfiles

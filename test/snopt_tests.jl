@@ -795,6 +795,43 @@ end
     @test SNOPT.active_snopt_callback_count() == 0
 end
 
+@testset "Suppressed output survives an unwritable temp directory" begin
+    silent = ["Major print level" => 0, "Minor print level" => 0]
+    solve_once() = snopt(
+        x -> (x[1] + 3)^2,
+        (g, x) -> begin g[1] = 2(x[1] + 3) end,
+        [2.0]; lb = [-1.0], ub = [5.0], options = silent
+    )
+    @test solve_once().status == 1
+
+    mktempdir() do dir
+        readonly = joinpath(dir, "readonly")
+        mkdir(readonly)
+        chmod(readonly, 0o500)   # r-x: cannot create files
+        try
+            withenv("TMPDIR" => readonly) do
+                # The scratch file must be created somewhere writable: never an
+                # uncreated path, and never silently downgraded to the null
+                # device, which leaves SNOPT stateful across later solves.
+                _, summpath, _ = SNOPT.snopt_output_files("", "")
+                @test summpath != SNOPT.SNOPT_DEVNULL
+                @test isfile(summpath)
+                rm(summpath; force = true)
+
+                ws = initialize("", "")
+                @test isopen(ws)
+                close(ws)
+            end
+        finally
+            chmod(readonly, 0o700)   # let mktempdir clean up
+        end
+    end
+
+    # The session must still be healthy afterwards. This is the assertion that
+    # actually caught the bad null-device fallback.
+    @test solve_once().status == 1
+end
+
 @testset "Jacobian shape validation" begin
     ws = make_ws()
     objfun = make_objfun(
