@@ -153,6 +153,13 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
     require_dimension(
         total == length(hs),
         "snOptB basis-status array must have length n + m = $total")
+    require_dimension(
+        size(J) == (m, n),
+        "snOptB Jacobian must have size (m, n) = ($m, $n); got $(size(J))")
+    require_dimension(
+        length(J.colptr) == n + 1,
+        "snOptB Jacobian column pointer must have length n + 1 = $(n + 1); " *
+        "got $(length(J.colptr))")
     prob.iu = Int32[0]
     prob.ru = [0.0]
     prob.x      = copy(x)
@@ -267,6 +274,14 @@ function snoptc!(prob::SnoptC; start::String = "Cold", name::String = "Julia",
     require_dimension(
         total == length(prob.hs),
         "SnoptC basis-status array must have length n + m_eff = $total")
+    require_dimension(
+        size(prob.J) == (prob.m_eff, prob.n),
+        "SnoptC Jacobian must have size (m_eff, n) = ($(prob.m_eff), $(prob.n)); " *
+        "got $(size(prob.J))")
+    require_dimension(
+        length(prob.J.colptr) == prob.n + 1,
+        "SnoptC Jacobian column pointer must have length n + 1 = $(prob.n + 1); " *
+        "got $(length(prob.J.colptr))")
     prob.ws.iu = Int32[0]
     prob.ws.ru = [0.0]
     prob.ws.x      = copy(prob.x)

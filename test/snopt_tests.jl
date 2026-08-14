@@ -795,6 +795,38 @@ end
     @test SNOPT.active_snopt_callback_count() == 0
 end
 
+@testset "Jacobian shape validation" begin
+    ws = make_ws()
+    objfun = make_objfun(
+        x -> (x[1] - 1)^2 + (x[2] - 2)^2,
+        (g, x) -> begin g[1] = 2(x[1] - 1); g[2] = 2(x[2] - 2) end,
+        ws.iw
+    )
+    n, m_eff = 2, 1
+    x  = [0.0, 0.0, 0.0]
+    bl = [-10.0, -10.0, -1.0e20]
+    bu = [10.0, 10.0, 1.0e20]
+    hs = zeros(Int32, n + m_eff)
+    # J claims a single column while the problem has n = 2, so J.colptr is one
+    # element short of the locJ(n+1) that SNOPT reads.
+    J_bad = SparseMatrixCSC{Float64,Int32}(1, 1, Int32[1, 2], Int32[1], Float64[0.0])
+    prob = SnoptB(ws, n, 0, m_eff, n, x, bl, bu, hs, J_bad,
+                  0.0, 0, Float64[], objfun, make_dummy_confun())
+    @test_throws DimensionMismatch snoptb!(prob)
+
+    J_bad_c = SparseMatrixCSC{Float64,Int32}(1, 1, Int32[1, 2], Int32[1], Float64[0.0])
+    usrfun = make_usrfun_c(
+        x -> x[1]^2,
+        (g, x) -> begin fill!(g, 0.0); g[1] = 2x[1] end,
+        (c, x) -> begin c[1] = x[1] end,
+        (jnz, x) -> fill!(jnz, 0.0),
+        J_bad_c, ws.iw
+    )
+    probc = SnoptC(ws, n, 1, 1, n, x, bl, bu, hs, J_bad_c,
+                   0.0, 0, Float64[], usrfun)
+    @test_throws DimensionMismatch snoptc!(probc)
+end
+
 @testset "SnoptC rejects inconsistent Jacobian sparsity" begin
     ws = make_ws()
     set_option!(ws, "Derivative option", 3)
