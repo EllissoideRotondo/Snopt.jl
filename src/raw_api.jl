@@ -147,7 +147,7 @@ end
 function snoptb!(prob::SnoptWorkspace, start::String, name::String,
                  m::Int, n::Int, nnCon::Int, nnObj::Int, nnJac::Int,
                  fObj::Float64, iObj::Int,
-                 confun::Function, objfun::Function,
+                 confun, objfun,
                  J::SparseMatrixCSC, bl::Vector{Float64}, bu::Vector{Float64},
                  hs::Vector{Int32}, x::Vector{Float64};
                  snlog=nothing)

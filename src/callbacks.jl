@@ -83,26 +83,26 @@ end
 abstract type AbstractActiveSnoptCallbacks end
 
 mutable struct ActiveSnoptACallbacks <: AbstractActiveSnoptCallbacks
-    usrfun::Function
+    usrfun::Any
     exception::Any
 end
-ActiveSnoptACallbacks(usrfun::Function) = ActiveSnoptACallbacks(usrfun, nothing)
+ActiveSnoptACallbacks(usrfun) = ActiveSnoptACallbacks(usrfun, nothing)
 
 mutable struct ActiveSnoptBCallbacks <: AbstractActiveSnoptCallbacks
-    confun::Function
-    objfun::Function
+    confun::Any
+    objfun::Any
     snlog::Any
     exception::Any
 end
-ActiveSnoptBCallbacks(confun::Function, objfun::Function; snlog=nothing) =
+ActiveSnoptBCallbacks(confun, objfun; snlog=nothing) =
     ActiveSnoptBCallbacks(confun, objfun, snlog, nothing)
 
 mutable struct ActiveSnoptCCallbacks <: AbstractActiveSnoptCallbacks
-    usrfun::Function
+    usrfun::Any
     snlog::Any
     exception::Any
 end
-ActiveSnoptCCallbacks(usrfun::Function; snlog=nothing) =
+ActiveSnoptCCallbacks(usrfun; snlog=nothing) =
     ActiveSnoptCCallbacks(usrfun, snlog, nothing)
 
 mutable struct ActiveSnoptCallbackRegistry
@@ -518,7 +518,7 @@ Objective events contain `kind = :objective`, `mode`, `major_iter`,
 `minor_iter`, `x`, and `f`.
 
 """
-function make_objfun(eval_obj::Function, eval_grad::Function,
+function make_objfun(eval_obj, eval_grad,
                      ws_iw::Vector{Int32}; callback=nothing)
     state = SnoptCallbackState()
 
@@ -557,7 +557,7 @@ function make_objfun(eval_obj::Function, eval_grad::Function,
     return register_callback_state!(objfun, state)
 end
 
-function make_objfun(eval_obj::Function, eval_grad::Function, log_fn::Function,
+function make_objfun(eval_obj, eval_grad, log_fn::Function,
                      ws_iw::Vector{Int32})
     return make_objfun(eval_obj, eval_grad, ws_iw;
                        callback=legacy_progress_callback(log_fn))
@@ -573,7 +573,7 @@ Constraint events contain `kind = :constraint`, `mode`, `major_iter`,
 per-evaluation event allocation.
 
 """
-function make_confun(eval_con::Function, eval_jac::Function, J,
+function make_confun(eval_con, eval_jac, J,
                      ws_iw::Vector{Int32}; callback=nothing)
     state = SnoptCallbackState()
 
@@ -614,7 +614,7 @@ function make_confun(eval_con::Function, eval_jac::Function, J,
     return register_callback_state!(confun, state)
 end
 
-make_confun(eval_con::Function, eval_jac::Function, J) =
+make_confun(eval_con, eval_jac, J) =
     make_confun(eval_con, eval_jac, J, Int32[])
 
 """
@@ -629,7 +629,7 @@ fill by finite differences. This requires SNOPT to be configured for
 finite-difference gradients via `set_option!(ws, "Derivative option", 0)`.
 
 """
-function make_usrfun_a(eval_F::Function; eval_G=nothing, callback=nothing)
+function make_usrfun_a(eval_F; eval_G=nothing, callback=nothing)
     state = SnoptCallbackState()
 
     function usrfun(status_::Ptr{Cint}, n_::Ptr{Cint}, x_::Ptr{Cdouble},
@@ -682,8 +682,8 @@ If `callback` is provided, it is called with a combined evaluation event contain
 Returning `false` requests SNOPT termination.
 
 """
-function make_usrfun_c(eval_obj::Function, eval_grad::Function,
-                       eval_con::Function, eval_jac::Function, J,
+function make_usrfun_c(eval_obj, eval_grad,
+                       eval_con, eval_jac, J,
                        ws_iw::Vector{Int32}; callback=nothing)
     state = SnoptCallbackState()
 
@@ -735,8 +735,8 @@ function make_usrfun_c(eval_obj::Function, eval_grad::Function,
     return register_callback_state!(usrfun, state)
 end
 
-function make_usrfun_c(eval_obj::Function, eval_grad::Function,
-                       eval_con::Function, eval_jac::Function, J)
+function make_usrfun_c(eval_obj, eval_grad,
+                       eval_con, eval_jac, J)
     return make_usrfun_c(eval_obj, eval_grad, eval_con, eval_jac, J, Int32[])
 end
 

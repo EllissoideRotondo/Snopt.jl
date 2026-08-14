@@ -71,7 +71,7 @@ sparse derivative pattern is given separately as linear (`iAfun`/`jAvar`/`A`) an
 nonlinear (`iGfun`/`jGvar`) triples. Solve in place with [`snopta!`](@ref). Build the
 user function with [`make_usrfun_a`](@ref).
 """
-mutable struct SnoptA{F<:Function} <: AbstractSnoptProblem
+mutable struct SnoptA{F} <: AbstractSnoptProblem
     ws::SnoptWorkspace
     nf::Int                           # number of F rows: objective + constraints
     n::Int                            # number of design variables
@@ -111,7 +111,7 @@ sparsity is held in `J`. Solve in place with [`snoptb!`](@ref) (or the alias
 [`snopt!`](@ref)). Construct the callbacks with [`make_objfun`](@ref) and
 [`make_confun`](@ref).
 """
-mutable struct SnoptB{F1<:Function, F2<:Function} <: AbstractSnoptProblem
+mutable struct SnoptB{F1, F2} <: AbstractSnoptProblem
     ws::SnoptWorkspace
     n::Int                            # num design variables
     nc::Int                           # num nonlinear constraints
@@ -145,7 +145,7 @@ evaluates the objective, objective gradient, constraints, and constraint Jacobia
 together (the combined analogue of [`SnoptB`](@ref)'s split callbacks). Solve in
 place with [`snoptc!`](@ref). Build the user function with [`make_usrfun_c`](@ref).
 """
-mutable struct SnoptC{F<:Function} <: AbstractSnoptProblem
+mutable struct SnoptC{F} <: AbstractSnoptProblem
     ws::SnoptWorkspace
     n::Int                            # num design variables
     nc::Int                           # num nonlinear constraints

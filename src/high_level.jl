@@ -97,7 +97,7 @@ function snopt_result(prob::SnoptB, memory::SnoptMemory)
                        memory)
 end
 
-function preflight_callbacks!(eval_obj::Function, eval_grad::Function,
+function preflight_callbacks!(eval_obj, eval_grad,
                               eval_con, eval_jac, x::Vector{Float64},
                               xlow::Vector{Float64}, xupp::Vector{Float64},
                               nc::Int, J::SparseMatrixCSC, callback)
@@ -180,7 +180,7 @@ Keyword arguments:
 SNOPT's infinite-bound value).
 
 """
-function snopt(eval_obj::Function, eval_grad::Function,
+function snopt(eval_obj, eval_grad,
                x0::AbstractVector{<:Real};
                lb=nothing, ub=nothing,
                eval_con=nothing, eval_jac=nothing,

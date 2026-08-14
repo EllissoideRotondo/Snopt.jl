@@ -962,6 +962,27 @@ end
     @test called[]
 end
 
+struct ShiftedQuadratic
+    target::Vector{Float64}
+end
+(q::ShiftedQuadratic)(x) = sum(abs2, x .- q.target)
+
+struct ShiftedGradient
+    target::Vector{Float64}
+end
+(q::ShiftedGradient)(g, x) = (g .= 2 .* (x .- q.target); nothing)
+
+@testset "Callable structs work as objective and gradient" begin
+    target = [1.0, 2.0]
+    result = snopt(
+        ShiftedQuadratic(target), ShiftedGradient(target), [0.0, 0.0];
+        lb = -10.0, ub = 10.0,
+        options = ["Major print level" => 0, "Minor print level" => 0]
+    )
+    @test result.status == 1
+    @test result.x ≈ target atol = 1.0e-5
+end
+
 @testset "Concurrent solves are serialized" begin
     if Threads.nthreads() > 1
         results = Vector{Any}(undef, 8)
