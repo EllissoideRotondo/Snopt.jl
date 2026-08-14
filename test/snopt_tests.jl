@@ -962,6 +962,27 @@ end
     @test called[]
 end
 
+@testset "Superbasics count is retained after a solve" begin
+    ws = make_ws()
+    objfun = make_objfun(
+        x -> (x[1] - 1)^2 + (x[2] - 2)^2,
+        (g, x) -> begin g[1] = 2(x[1] - 1); g[2] = 2(x[2] - 2) end,
+        ws.iw
+    )
+    prob = make_unconstrained_prob(
+        ws, [0.0, 0.0], fill(-10.0, 2), fill(10.0, 2), objfun, make_dummy_confun()
+    )
+    @test prob.nS == 0
+    @test snoptb!(prob) == 1
+    # The value SNOPT returned must reach both the problem and the workspace
+    # rather than being discarded. Do not assert a particular count: how many
+    # variables end up superbasic is a solver detail. The warm-start test is
+    # what proves the retained value is useful.
+    @test prob.nS == prob.ws.nS
+    @test prob.nS >= 0
+    @test prob.ws.nS >= 0
+end
+
 struct ShiftedQuadratic
     target::Vector{Float64}
 end

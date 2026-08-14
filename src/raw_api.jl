@@ -150,10 +150,10 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
                  confun, objfun,
                  J::SparseMatrixCSC, bl::Vector{Float64}, bu::Vector{Float64},
                  hs::Vector{Int32}, x::Vector{Float64};
-                 snlog=nothing)
+                 snlog=nothing, nS::Int = 0)
     return lock(SNOPT_LOCK) do
         snoptb_locked!(prob, start, name, m, n, nnCon, nnObj, nnJac, fObj, iObj,
-                       confun, objfun, J, bl, bu, hs, x, snlog)
+                       confun, objfun, J, bl, bu, hs, x, snlog, nS)
     end
 end
 
@@ -162,7 +162,8 @@ function snoptb_locked!(prob::SnoptWorkspace, start::String, name::String,
                         fObj::Float64, iObj::Int,
                         confun, objfun,
                         J::SparseMatrixCSC, bl::Vector{Float64}, bu::Vector{Float64},
-                        hs::Vector{Int32}, x::Vector{Float64}, snlog)
+                        hs::Vector{Int32}, x::Vector{Float64}, snlog,
+                        nS_in::Int)
     require_open_workspace(prob, "snoptb!")
     total = n + m
     require_dimension(
@@ -190,7 +191,7 @@ function snoptb_locked!(prob::SnoptWorkspace, start::String, name::String,
     locJ = convert(Array{Cint}, J.colptr)
     neJ  = length(valJ)
     status  = Int32[0]
-    nS      = Int32[0]
+    nS      = Int32[nS_in]
     nInf    = Int32[0]
     sInf    = [0.0]
     obj_val = [0.0]
@@ -265,6 +266,7 @@ function snoptb_locked!(prob::SnoptWorkspace, start::String, name::String,
     end
     prob.status  = status[1]
     prob.obj_val = obj_val[1]
+    prob.nS      = Int(nS[1])
     prob.num_inf = nInf[1]
     prob.sum_inf = sInf[1]
     prob.iterations = workspace_value(prob.iw, IW_MINOR_ITNS)
@@ -318,7 +320,7 @@ function snoptc_locked!(prob::SnoptC, start::String, name::String, snlog)
     locJ = convert(Array{Cint}, prob.J.colptr)
     neJ  = length(valJ)
     status  = Int32[0]
-    nS      = Int32[0]
+    nS      = Int32[prob.nS]
     nInf    = Int32[0]
     sInf    = [0.0]
     obj_val = [0.0]
@@ -397,7 +399,9 @@ function snoptc_locked!(prob::SnoptC, start::String, name::String, snlog)
     end
     prob.status  = Int(status[1])
     prob.obj_val = obj_val[1]
+    prob.nS      = Int(nS[1])
     prob.lambda  = prob.ws.lambda
+    prob.ws.nS     = prob.nS
     prob.ws.status = prob.status
     prob.ws.obj_val = prob.obj_val
     prob.ws.num_inf = Int(nInf[1])

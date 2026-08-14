@@ -55,9 +55,10 @@ function snoptb!(prob::SnoptB; start::String = "Cold", name::String = "Julia",
                      0.0, 0,
                      prob.confun, prob.objfun,
                      prob.J, prob.bl, prob.bu, prob.hs, prob.x;
-                     snlog)
+                     snlog, nS = prob.nS)
     prob.obj_val = prob.ws.obj_val
     prob.status  = inform
+    prob.nS      = prob.ws.nS
     prob.lambda  = prob.ws.lambda
     return inform
 end

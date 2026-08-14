@@ -35,6 +35,7 @@ mutable struct SnoptWorkspace
     iterations::Int
     major_itns::Int
     run_time::Float64
+    nS::Int
     function SnoptWorkspace(leniw::Int, lenrw::Int)
         # SNOPT's sninit writes a fixed-size header into iw/rw and requires at
         # least 500 elements in each. Smaller arrays let f_sninitx write out of
@@ -47,7 +48,7 @@ mutable struct SnoptWorkspace
                    0, 0,
                    Int32[0], [0.0],
                    Float64[], Float64[], 0.0,
-                   0, 0.0, 0, 0, 0.0)
+                   0, 0.0, 0, 0, 0.0, 0)
         finalizer(free!, prob)
         prob
     end
@@ -127,7 +128,14 @@ mutable struct SnoptB{F1, F2} <: AbstractSnoptProblem
     lambda::Vector{Float64}           # multipliers, filled after solve
     objfun::F1
     confun::F2
+    nS::Int                           # superbasics count, retained for warm starts
 end
+
+# Keeps the pre-0.3 positional form working; nS defaults to 0 (cold start).
+SnoptB(ws, n, nc, m_eff, nnobj, x, bl, bu, hs, J, obj_val, status, lambda,
+       objfun, confun) =
+    SnoptB(ws, n, nc, m_eff, nnobj, x, bl, bu, hs, J, obj_val, status, lambda,
+           objfun, confun, 0)
 
 """
     SnoptProblem
@@ -160,7 +168,14 @@ mutable struct SnoptC{F} <: AbstractSnoptProblem
     status::Int                       # SNOPT inform code, filled after solve
     lambda::Vector{Float64}           # multipliers, filled after solve
     usrfun::F
+    nS::Int                           # superbasics count, retained for warm starts
 end
+
+# Keeps the pre-0.3 positional form working; nS defaults to 0 (cold start).
+SnoptC(ws, n, nc, m_eff, nnobj, x, bl, bu, hs, J, obj_val, status, lambda,
+       usrfun) =
+    SnoptC(ws, n, nc, m_eff, nnobj, x, bl, bu, hs, J, obj_val, status, lambda,
+           usrfun, 0)
 
 """
     SnoptMemory
