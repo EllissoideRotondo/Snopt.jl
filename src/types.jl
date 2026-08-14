@@ -71,6 +71,26 @@ Low-level problem for SNOPT's `snOptA` interface, in which a single user functio
 sparse derivative pattern is given separately as linear (`iAfun`/`jAvar`/`A`) and
 nonlinear (`iGfun`/`jGvar`) triples. Solve in place with [`snopta!`](@ref). Build the
 user function with [`make_usrfun_a`](@ref).
+
+Constructed positionally, in field order:
+
+    SnoptA(ws, nf, n, objadd, objrow,
+           iAfun, jAvar, A, iGfun, jGvar,
+           xlow, xupp, flow, fupp,
+           x, xstate, xmul,
+           F, Fstate, Fmul,
+           status, nS, num_inf, sum_inf,
+           usrfun)
+
+with `ws` a [`SnoptWorkspace`](@ref); `nf` rows and `n` variables; the linear
+part as `Int32` row/column indices `iAfun`/`jAvar` with values `A` (equal
+lengths), and the nonlinear pattern as `Int32` `iGfun`/`jGvar` (equal lengths);
+bounds `xlow`/`xupp` of length `n` and `flow`/`fupp` of length `nf`; the point
+`x`, states `xstate::Vector{Int32}`, and multipliers `xmul` of length `n`; row
+values `F`, states `Fstate::Vector{Int32}`, and multipliers `Fmul` of length
+`nf`. The scalars `status`, `nS`, `num_inf`, `sum_inf` are outputs — pass
+`0, 0, 0, 0.0` (a nonzero `nS` seeds a warm start's superbasics count). The
+test suite's snOptA testsets contain complete worked constructions.
 """
 mutable struct SnoptA{F} <: AbstractSnoptProblem
     ws::SnoptWorkspace
@@ -111,6 +131,22 @@ vectors `x`, `bl`, `bu`, `hs` of length `n + m_eff`, and the constraint Jacobian
 sparsity is held in `J`. Solve in place with [`snoptb!`](@ref) (or the alias
 [`snopt!`](@ref)). Construct the callbacks with [`make_objfun`](@ref) and
 [`make_confun`](@ref).
+
+Constructed positionally, in field order:
+
+    SnoptB(ws, n, nc, m_eff, nnobj,
+           x, bl, bu, hs, J,
+           obj_val, status, lambda,
+           objfun, confun[, nS])
+
+with `n` design variables, `nc` nonlinear constraints, `m_eff = max(nc, 1)`
+effective rows (SNOPT requires at least one row, so unconstrained problems carry
+a dummy), and `nnobj <= n` nonlinear objective variables (usually `n`). The
+extended arrays `x`, `bl`, `bu`, and `hs::Vector{Int32}` have length
+`n + m_eff` — design variables first, then one slack per row — and `J` is the
+`m_eff × n` `SparseMatrixCSC{Float64,Int32}` Jacobian sparsity. `obj_val`,
+`status`, and `lambda` are outputs — pass `0.0, 0, Float64[]`. The trailing `nS`
+defaults to `0`; pass a previous solve's superbasics count when warm-starting.
 """
 mutable struct SnoptB{F1, F2} <: AbstractSnoptProblem
     ws::SnoptWorkspace
@@ -152,6 +188,23 @@ Low-level problem for SNOPT's `snOptC` interface, in which a single user functio
 evaluates the objective, objective gradient, constraints, and constraint Jacobian
 together (the combined analogue of [`SnoptB`](@ref)'s split callbacks). Solve in
 place with [`snoptc!`](@ref). Build the user function with [`make_usrfun_c`](@ref).
+
+Constructed positionally, in field order (identical to [`SnoptB`](@ref) except a
+single `usrfun` replaces the `objfun`/`confun` pair):
+
+    SnoptC(ws, n, nc, m_eff, nnobj,
+           x, bl, bu, hs, J,
+           obj_val, status, lambda,
+           usrfun[, nS])
+
+with `n` design variables, `nc` nonlinear constraints, `m_eff = max(nc, 1)`
+effective rows (SNOPT requires at least one row, so unconstrained problems carry
+a dummy), and `nnobj <= n` nonlinear objective variables (usually `n`). The
+extended arrays `x`, `bl`, `bu`, and `hs::Vector{Int32}` have length
+`n + m_eff` — design variables first, then one slack per row — and `J` is the
+`m_eff × n` `SparseMatrixCSC{Float64,Int32}` Jacobian sparsity. `obj_val`,
+`status`, and `lambda` are outputs — pass `0.0, 0, Float64[]`. The trailing `nS`
+defaults to `0`; pass a previous solve's superbasics count when warm-starting.
 """
 mutable struct SnoptC{F} <: AbstractSnoptProblem
     ws::SnoptWorkspace
@@ -194,8 +247,11 @@ end
     SnoptBasis
 
 The basis SNOPT ended a solve with: the basis-status array `hs` for the extended
-problem, the number of superbasic variables `nS`, and the problem dimensions
-`n`/`m` they belong to. Pass one back to [`snopt`](@ref) as
+problem, the number of superbasic variables `nS`, and the dimensions they belong
+to — `n` design variables and `m` **effective** SNOPT rows. `m` is the row count
+of the extended problem, not the user's constraint count: an unconstrained
+high-level solve has `m == 1` because the wrapper adds a dummy row, so
+`length(hs) == n + m` always. Pass one back to [`snopt`](@ref) as
 `start = "Warm", basis = result.basis` to warm-start a closely related solve.
 """
 struct SnoptBasis
@@ -222,6 +278,9 @@ Outcome of a high-level [`snopt`](@ref) solve. Fields:
   * `run_time`: SNOPT-reported solve time in seconds.
   * `memory`: the [`SnoptMemory`](@ref) estimate used to size the workspace.
   * `basis`: the final [`SnoptBasis`](@ref), for warm-starting a later solve.
+    Only meaningful when SNOPT actually ran: if the evaluation `callback`
+    requested a stop during the preflight evaluation (before SNOPT started),
+    `basis` is all zeros and warm-starting from it is just a cold start.
 """
 struct SnoptResult
     status::Int

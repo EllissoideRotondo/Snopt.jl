@@ -102,6 +102,13 @@ function set_option!(prob::SnoptWorkspace, keyword::String, value::Int)
     return check_option_errors(errors[1], "$(repr(keyword)) => $(value)")
 end
 
+# The docstring promises Integer/Real; funnel every width into the two ccall
+# methods so Int32, Float32, Rational, and friends work as advertised.
+set_option!(prob::SnoptWorkspace, keyword::String, value::Integer) =
+    set_option!(prob, keyword, Int(value))
+set_option!(prob::SnoptWorkspace, keyword::String, value::Real) =
+    set_option!(prob, keyword, Float64(value))
+
 function set_option!(prob::SnoptWorkspace, keyword::String, value::Float64)
     require_open_workspace(prob, "set_option!")
     isempty(strip(keyword)) &&

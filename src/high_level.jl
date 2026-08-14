@@ -176,12 +176,18 @@ Keyword arguments:
   * `snstop`: optional callback receiving `SnoptStopEvent` major-iteration events.
     Return `false` from it to stop SNOPT; the solve then reports inform code 74
     (`:User_Requested_Stop`). Use this for custom termination criteria.
-  * `start`: SNOPT start mode, `"Cold"` (default), `"Warm"`, or `"Hot"`. A warm
-    or hot start also requires `basis`.
+  * `start`: SNOPT start mode, `"Cold"` (default) or `"Warm"`. A warm start
+    also requires `basis`. (`"Hot"` is rejected here: SNOPT's hot start reuses
+    factorization state from the previous solve's workspace, and the high-level
+    entry point builds a fresh workspace per call. Hot-start via the low-level
+    interface by reusing one workspace across solves.)
   * `basis`: a [`SnoptBasis`](@ref) from a previous result, reused as the
-    starting basis. Only valid together with `start = "Warm"` or `"Hot"`.
+    starting basis. Only valid together with `start = "Warm"`.
   * `printfile`, `summfile`: paths for SNOPT's print and summary files; empty
-    strings (the default) suppress them.
+    strings (the default) suppress the user-visible output. (When both are
+    empty, a throwaway temporary file still backs the summary channel — SNOPT
+    misbehaves with every channel on the null device — and is deleted when the
+    workspace closes.)
   * `name`: the ≤8-character problem name SNOPT prints.
 
 `x0` must be finite, and bounds may not contain NaN (`±Inf` is mapped to
@@ -234,15 +240,28 @@ function snopt(eval_obj, eval_grad,
     end
 end
 
-# A warm or hot start is only meaningful with the basis SNOPT ended a previous
-# solve with; without it SNOPT would restart from a zeroed basis, which is a
-# cold start wearing a different name.
+# A warm start is only meaningful with the basis SNOPT ended a previous solve
+# with; without it SNOPT would restart from a zeroed basis, which is a cold
+# start wearing a different name.
 function prepare_start_basis(basis, start::AbstractString, n::Int, m_eff::Int)
-    if lowercase(strip(start)) == "cold"
+    key = lowercase(strip(start))
+    if key == "cold"
         basis === nothing ||
-            throw(ArgumentError("basis is only meaningful with start = \"Warm\" or \"Hot\""))
+            throw(ArgumentError("basis is only meaningful with start = \"Warm\""))
         return zeros(Int32, n + m_eff), 0
     end
+    # SNOPT's Hot start reuses the LU factors and reduced-Hessian state living
+    # inside the workspace of the previous solve. The high-level entry point
+    # builds a fresh workspace per call, so that state never exists here and
+    # SNOPT reads uninitialized memory (observed as a segfault in lu6sol/lu6u).
+    # Hot starts are only possible at the low-level interface, reusing the same
+    # workspace across solves.
+    key == "hot" &&
+        throw(ArgumentError("start = \"Hot\" is not supported by the high-level " *
+                            "snopt: each call uses a fresh workspace, and SNOPT's " *
+                            "hot start needs factorization state from the previous " *
+                            "solve's workspace. Use start = \"Warm\" with a basis, " *
+                            "or drive the low-level interface with one workspace."))
     basis === nothing &&
         throw(ArgumentError("start = $(repr(start)) requires `basis` from a previous SnoptResult"))
     basis isa SnoptBasis ||

@@ -13,6 +13,24 @@ freeing it even if an error or callback exception occurs.
 result = snopt(eval_obj, eval_grad, x0; kwargs...)
 ```
 
+The snippets on this page share one running example — a quadratic objective in
+four variables and the two HS71 constraints:
+
+```julia
+using SNOPT
+
+f(x)      = (x[1] - 1)^2 + (x[2] - 2)^2 + x[3]^2 + x[4]^2
+g!(g, x)  = (g .= [2(x[1] - 1), 2(x[2] - 2), 2x[3], 2x[4]])
+c!(c, x)  = (c[1] = x[1] * x[2] * x[3] * x[4]; c[2] = sum(abs2, x); nothing)
+jac!(jnz, x) = begin      # column-major order of the dense 2×4 pattern
+    for j in 1:4
+        jnz[2j - 1] = prod(x[k] for k in 1:4 if k != j)
+        jnz[2j]     = 2x[j]
+    end
+end
+x0 = [1.0, 5.0, 5.0, 1.0]
+```
+
 ## Required arguments
 
 | Argument    | Meaning |
@@ -29,7 +47,7 @@ result = snopt(eval_obj, eval_grad, x0; kwargs...)
 (`1e20`) automatically.
 
 ```julia
-snopt(f, g!, x0; lb = [0.0, -1.0], ub = 5.0)   # vector lower, scalar upper
+snopt(f, g!, x0; lb = [0.0, -1.0, 0.0, -1.0], ub = 5.0)   # vector lower, scalar upper
 ```
 
 ## Nonlinear constraints
@@ -136,8 +154,8 @@ SNOPT's own default routines.
 |-------------|----------|---------|
 | `printfile` | `""`     | path for SNOPT's detailed print output (empty = suppressed) |
 | `summfile`  | `""`     | path for SNOPT's summary output |
-| `start`     | `"Cold"` | `"Cold"`, or `"Warm"`/`"Hot"` together with `basis` |
-| `basis`     | `nothing`| a [`SnoptBasis`](@ref) from a previous result; required for a warm or hot start |
+| `start`     | `"Cold"` | `"Cold"`, or `"Warm"` together with `basis` |
+| `basis`     | `nothing`| a [`SnoptBasis`](@ref) from a previous result; required for a warm start |
 | `name`      | `"Julia"`| ≤8-character problem name shown in SNOPT output |
 
 ### Warm starts
@@ -154,6 +172,12 @@ second = snopt(f, g!, x0; start = "Warm", basis = first.basis)
 The basis records the problem dimensions it was built for, and `snopt` rejects
 one that does not match the problem at hand. Asking for a warm start without a
 basis is an error rather than a silent cold start.
+
+`start = "Hot"` is rejected by the high-level interface: SNOPT's hot start
+reuses factorization state stored *inside the workspace* of the previous solve,
+and `snopt` builds a fresh workspace on every call. Hot starts are possible at
+the [low-level interface](lowlevel.md) by running repeated solves against the
+same `SnoptWorkspace`.
 
 ## The result
 
@@ -173,5 +197,9 @@ result.run_time        # SNOPT-reported solve time (s)
 result.memory          # the SnoptMemory estimate used to size the workspace
 result.basis           # the final SnoptBasis, for a later warm start
 ```
+
+`result.basis` is only meaningful when SNOPT actually ran; if the evaluation
+`callback` stopped the solve during the preflight evaluation, it is all zeros
+and warm-starting from it is equivalent to a cold start.
 
 Map an inform code to its symbolic meaning through [`SNOPT_STATUS`](@ref).

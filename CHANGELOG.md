@@ -5,6 +5,12 @@
 ### Breaking
 
 - Minimum Julia version is now 1.10 (1.9 reached end of life).
+- The high-level `snopt` rejects `start = "Hot"` with an `ArgumentError`.
+  SNOPT's hot start reuses factorization state stored inside the previous
+  solve's workspace; the high-level entry point builds a fresh workspace per
+  call, so a hot start read uninitialized memory and crashed. Use
+  `start = "Warm"` with a `basis`, or drive the low-level interface with one
+  workspace.
 - `SnoptResult` gained a `basis` field, and `SnoptB`/`SnoptC` gained a trailing
   `nS` field. The previous positional constructors for the problem types still
   work and default `nS` to `0`, so existing code that builds them by hand is
@@ -33,8 +39,13 @@
 - Concurrent solves are serialized internally rather than corrupting one
   another's workspace. Workspace sizing, creation, option application, and the
   solve are held as a single transaction.
-- Library discovery requires the `f_*` interface symbols, so a `libsnopt7` built
-  without the C interface is reported at load time instead of at the first solve.
+- Library discovery probes every `f_*` interface symbol the package calls
+  (solvers, kernels, options, specs, memory), so a `libsnopt7` built without
+  the C interface — or with only part of it — is reported at load time instead
+  of at the first solve. The resolved library path is normalized to an
+  absolute path.
+- `set_option!` accepts any `Integer`/`Real` value width as documented, not
+  just `Int`/`Float64`.
 - The scratch summary file used for suppressed output is created eagerly in a
   writable location, so an unwritable temporary directory no longer leaves the
   session broken with every later solve returning status 82.

@@ -41,7 +41,15 @@ export DYLD_LIBRARY_PATH=/path/to/snopt:$DYLD_LIBRARY_PATH   # macOS
 ```
 
 If the library is not found, the package still loads; `has_snopt()` returns
-`false` and solves raise an informative error.
+`false` and solves raise an informative error. Depending on how your SNOPT
+distribution is licensed, you may also need to point the `SNOPT_LICENSE`
+environment variable at your license file before solving — see the vendor's
+setup instructions.
+
+The library must include the `snopt-interface` C shims (the `f_*` entry
+points); SNOPT.jl probes for every symbol it calls before accepting a library,
+so a build without them is rejected at load time with a fallback to the next
+search location.
 
 SNOPT keeps one global Fortran session per process, so SNOPT.jl serializes
 solves internally: concurrent calls from several threads are safe, but they run
@@ -56,10 +64,11 @@ point:
 ```julia
 using SNOPT
 
-result = snopt(
-    x -> (x[1] - 1)^2 + (x[2] - 2)^2,                          # objective
-    (g, x) -> (g[1] = 2(x[1]-1); g[2] = 2(x[2]-2); nothing),   # gradient
-    [0.0, 0.0];
+f(x)     = (x[1] - 1)^2 + (x[2] - 2)^2                     # objective
+g!(g, x) = (g[1] = 2(x[1]-1); g[2] = 2(x[2]-2); nothing)   # gradient
+x0       = [0.0, 0.0]
+
+result = snopt(f, g!, x0;
     lb = -10.0, ub = 10.0,
     options = ["Major print level" => 0, :minor_print_level => 0],
 )
@@ -70,7 +79,7 @@ result.objective       # final objective value
 result.x               # solution vector
 ```
 
-Key points of the low-level interface:
+Key points of the high-level interface:
 
 - **Constraints.** Pass `eval_con`, `eval_jac`, `lcon`, `ucon`, and an optional
   sparse Jacobian sparsity pattern `J` (a `SparseMatrixCSC`). `eval_jac(jnz, x)`

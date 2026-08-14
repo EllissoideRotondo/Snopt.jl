@@ -10,8 +10,15 @@ global libsnopt7::String = ""
 
 # A library that dlopens is not necessarily usable: SNOPT can be built without
 # the snopt-interface C shims, and then every ccall in this package would fail
-# at solve time instead of at load time. Probe the symbols we actually call.
-const REQUIRED_SNOPT_SYMBOLS = (:f_sninitx, :f_snend, :f_snset, :f_snmem, :f_snoptb)
+# at solve time instead of at load time. Probe every symbol this package calls
+# (keep this tuple in sync with the ccall sites: `grep -oh ':f_[a-z]*' src/*.jl`).
+const REQUIRED_SNOPT_SYMBOLS = (
+    :f_sninitx, :f_snend,                       # session setup / teardown
+    :f_snset, :f_snseti, :f_snsetr, :f_snspecf, # options
+    :f_snmem,                                   # workspace sizing
+    :f_snopta, :f_snoptb, :f_snoptc,            # solvers
+    :f_snkera, :f_snkerb, :f_snkerc,            # kernels behind snlog/snstop
+)
 
 function loadable_library_path(libpath::AbstractString)
     isempty(libpath) && return ""
@@ -24,7 +31,10 @@ function loadable_library_path(libpath::AbstractString)
     finally
         Libdl.dlclose(d)
     end
-    return String(libpath)
+    # Callers hand in either a directory join (relative when SNOPTDIR or a
+    # library-path entry is relative) or a loader-resolved dlpath (already
+    # absolute); normalize so the documented "absolute path" promise holds.
+    return String(abspath(libpath))
 end
 
 """

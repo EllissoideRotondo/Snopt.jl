@@ -98,8 +98,11 @@ nonlinear objective variables, and `nnJac` nonlinear Jacobian variables.
 
 All three are subtypes of [`AbstractSnoptProblem`](@ref) and are solved in place by
 [`snopt!`](@ref), which dispatches to [`snopta!`](@ref), [`snoptb!`](@ref), or
-[`snoptc!`](@ref). After a solve the problem's `status`, objective, multipliers, and
-final point are populated.
+[`snoptc!`](@ref). After a solve the problem's `status`, multipliers, and final
+point are populated. [`SnoptB`](@ref) and [`SnoptC`](@ref) also carry the final
+objective in their `obj_val` field; [`SnoptA`](@ref) has no such field — its
+objective is the row value `F[objrow] + objadd` (the workspace's `obj_val`
+mirrors it after the solve).
 
 ## Building callbacks
 
@@ -128,6 +131,7 @@ directly only when driving SNOPT's kernels yourself.
 A minimal `snOptB` solve assembled by hand:
 
 ```julia
+using SNOPT
 using SparseArrays
 
 initialize("", "") do ws

@@ -26,7 +26,11 @@ end
 Solve a low-level problem in place, dispatching on its type to [`snopta!`](@ref),
 [`snoptb!`](@ref), or [`snoptc!`](@ref). The problem's result fields (`status`,
 `obj_val`, multipliers, and final `x`) are overwritten and the SNOPT inform code is
-returned. `start` selects the SNOPT start mode (`"Cold"`, `"Warm"`, or `"Hot"`),
+returned. `start` selects the SNOPT start mode (`"Cold"`, `"Warm"`, or `"Hot"`).
+A warm start needs the problem's `hs`/`nS` seeded from a previous solve; a hot
+start additionally reuses factorization state that lives *inside the workspace*,
+so it is only valid when this solve reuses the same [`SnoptWorkspace`](@ref) the
+previous solve ran in — with a fresh workspace SNOPT reads uninitialized memory.
 `name` is the ≤8-character problem name SNOPT prints, `snlog` is an optional
 major-iteration log callback, and `snstop` is an optional major-iteration
 termination callback; both are honored by all three methods, and supplying either

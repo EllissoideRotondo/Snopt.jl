@@ -29,8 +29,22 @@ You must supply a SNOPT shared library built for your platform:
 SNOPT.jl targets **SNOPT 7.7**. It reads iteration counters and the reported run
 time from fixed offsets in SNOPT's work arrays, which are internal to that
 release series, so a different major version may load and then report wrong
-counters. The library must also export the snopt-interface `f_*` C entry points;
-a build without them is reported at load time rather than at the first solve.
+counters.
+
+The library must also export the
+[snopt-interface](https://github.com/snopt/snopt-interface) `f_*` C entry
+points (`f_sninitx`, `f_snoptb`, `f_snkera`, ...). Vendor-supplied binaries
+usually include them; a library built from the bare Fortran sources does not,
+and needs the snopt-interface shims compiled in. SNOPT.jl probes for every
+`f_*` symbol it calls before accepting a library, so a build without them is
+rejected at load time (with a warning and a fallback to the next search
+location) rather than failing at the first solve.
+
+!!! note "License file"
+    Depending on how your SNOPT distribution is licensed, the library may
+    require the `SNOPT_LICENSE` environment variable to point at your license
+    file. A mislicensed library can load fine and still refuse to solve —
+    consult the setup instructions that came with your SNOPT distribution.
 
 The most reliable way to point the package at it is the `SNOPTDIR` environment
 variable, set to the **directory** that contains the library:

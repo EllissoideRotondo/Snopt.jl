@@ -1,8 +1,10 @@
 """
     snopt_no_progress(event) -> true
 
-Default progress callback: accepts every event and never requests termination. Use it
-as an explicit "do nothing" value wherever a `callback`/`snlog` argument is expected.
+No-op progress callback: accepts every event and never requests termination. Use
+it as an explicit "do nothing" value wherever a `callback`/`snlog`/`snstop`
+argument is expected. It is not the default — those keywords default to
+`nothing`, which additionally skips building the event object.
 """
 snopt_no_progress(event) = true
 
@@ -500,8 +502,8 @@ end
 Create a Julia callback compatible with SNOPT's `snLog` hook. `callback` is
 called with a [`SnoptMajorLog`](@ref) after each major-iteration log event.
 Returning `false` requests termination from SNOPT; any other return value lets
-SNOPT continue. The `snlog` hook is available for [`SnoptB`](@ref) and
-[`SnoptC`](@ref) solves.
+SNOPT continue. The `snlog` hook is available for [`SnoptA`](@ref),
+[`SnoptB`](@ref), and [`SnoptC`](@ref) solves.
 
 """
 function make_snlog(callback)

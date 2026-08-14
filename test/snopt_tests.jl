@@ -208,6 +208,16 @@ end
 @testset "Library discovery rejects a library without the f_* interface" begin
     @test :f_sninitx in SNOPT.REQUIRED_SNOPT_SYMBOLS
     @test :f_snoptb in SNOPT.REQUIRED_SNOPT_SYMBOLS
+    # The probe must cover every f_* symbol the package actually ccalls, or a
+    # library missing one of them would pass has_snopt() and fail mid-solve.
+    called = Set{Symbol}()
+    for file in readdir(dirname(pathof(SNOPT)); join = true)
+        endswith(file, ".jl") || continue
+        for m in eachmatch(r":(f_[a-z]+)", read(file, String))
+            push!(called, Symbol(m.captures[1]))
+        end
+    end
+    @test issubset(called, Set(SNOPT.REQUIRED_SNOPT_SYMBOLS))
     # libm loads fine but exports none of SNOPT's C shims.
     fake = string("libm.", Libdl.dlext)
     @test SNOPT.loadable_library_path(fake) == ""
@@ -1178,6 +1188,23 @@ end
     # A basis passed to a cold start is a mistake worth reporting.
     @test_throws ArgumentError snopt(f, g!, perturbed;
         lb = -10.0, ub = 10.0, options = silent, basis = solved.basis)
+    # A hot start is rejected up front: SNOPT's hot start reuses factorization
+    # state from the previous solve's workspace, and the high-level entry point
+    # builds a fresh workspace per call — attempting it segfaults inside SNOPT
+    # (observed in lu6sol/lu6u on SNOPT 7.7.7).
+    @test_throws ArgumentError snopt(f, g!, perturbed;
+        lb = -10.0, ub = 10.0, options = silent,
+        start = "Hot", basis = solved.basis)
+end
+
+@testset "set_option! accepts any Integer and Real width" begin
+    ws = make_ws()
+    @test set_option!(ws, "Major iterations limit", Int32(50)) == 0
+    @test set_option!(ws, "Major iterations limit", UInt16(50)) == 0
+    @test set_option!(ws, "Major optimality tolerance", Float32(1e-5)) == 0
+    @test set_option!(ws, "Major optimality tolerance", 1 // 100000) == 0
+    @test_throws ArgumentError set_option!(ws, "Major optimality tolerance", NaN32)
+    close(ws)
 end
 
 @testset "Warm start (snOptA)" begin
