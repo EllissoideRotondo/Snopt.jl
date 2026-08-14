@@ -58,6 +58,12 @@ built without a derivative function, SNOPT must be configured for finite-differe
 gradients (`set_option!(ws, "Derivative option", 0)`).
 """
 function snopta!(prob::SnoptA; start::String = "Cold", name::String = "Julia")
+    return lock(SNOPT_LOCK) do
+        snopta_locked!(prob, start, name)
+    end
+end
+
+function snopta_locked!(prob::SnoptA, start::String, name::String)
     require_open_workspace(prob.ws, "snopta!")
     require_dimension(
         prob.n == length(prob.x) == length(prob.xlow) == length(prob.xupp),
@@ -145,6 +151,18 @@ function snoptb!(prob::SnoptWorkspace, start::String, name::String,
                  J::SparseMatrixCSC, bl::Vector{Float64}, bu::Vector{Float64},
                  hs::Vector{Int32}, x::Vector{Float64};
                  snlog=nothing)
+    return lock(SNOPT_LOCK) do
+        snoptb_locked!(prob, start, name, m, n, nnCon, nnObj, nnJac, fObj, iObj,
+                       confun, objfun, J, bl, bu, hs, x, snlog)
+    end
+end
+
+function snoptb_locked!(prob::SnoptWorkspace, start::String, name::String,
+                        m::Int, n::Int, nnCon::Int, nnObj::Int, nnJac::Int,
+                        fObj::Float64, iObj::Int,
+                        confun, objfun,
+                        J::SparseMatrixCSC, bl::Vector{Float64}, bu::Vector{Float64},
+                        hs::Vector{Int32}, x::Vector{Float64}, snlog)
     require_open_workspace(prob, "snoptb!")
     total = n + m
     require_dimension(
@@ -266,6 +284,12 @@ iteration (routing the solve through SNOPT's `snKerC` kernel).
 """
 function snoptc!(prob::SnoptC; start::String = "Cold", name::String = "Julia",
                  snlog=nothing)
+    return lock(SNOPT_LOCK) do
+        snoptc_locked!(prob, start, name, snlog)
+    end
+end
+
+function snoptc_locked!(prob::SnoptC, start::String, name::String, snlog)
     require_open_workspace(prob.ws, "snoptc!")
     total = prob.n + prob.m_eff
     require_dimension(

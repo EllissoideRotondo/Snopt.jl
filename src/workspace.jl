@@ -9,6 +9,16 @@ const _SNOPT_ACTIVE_ID  = Threads.Atomic{Int}(0)
 const _SNOPT_ID_COUNTER = Threads.Atomic{Int}(0)
 const _SNOPT_ACTIVE_WORKSPACE = Ref{Any}(nothing)
 
+# SNOPT keeps one global Fortran session per process. This lock serializes
+# workspace creation and every solve, so a second task cannot close the
+# workspace another task is currently running inside. It is a ReentrantLock
+# because the high-level `snopt` holds it across both `initialize` and the
+# solve that follows.
+#
+# `free!` must NOT take this lock: it runs as a GC finalizer, where acquiring a
+# lock risks deadlock. Finalization stays on the atomic CAS above.
+const SNOPT_LOCK = ReentrantLock()
+
 function reset_snopt_defaults!(prob::SnoptWorkspace)
     optstring = "Defaults"
     errors = Int32[0]
@@ -214,6 +224,13 @@ function initialize(printfile::String, summfile::String, leniw::Int, lenrw::Int)
         "SNOPT library not loaded. Set SNOPTDIR (or DYLD_LIBRARY_PATH on macOS) " *
         "to the directory containing libsnopt7 and restart Julia, " *
         "or call SNOPT.find_snopt_lib() to diagnose.")
+    return lock(SNOPT_LOCK) do
+        initialize_locked(printfile, summfile, leniw, lenrw)
+    end
+end
+
+function initialize_locked(printfile::String, summfile::String,
+                           leniw::Int, lenrw::Int)
     close_active_workspace!()
     prob = SnoptWorkspace(leniw, lenrw)
     printpath, summpath, tempfiles = snopt_output_files(printfile, summfile)

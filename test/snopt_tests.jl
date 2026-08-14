@@ -962,6 +962,26 @@ end
     @test called[]
 end
 
+@testset "Concurrent solves are serialized" begin
+    if Threads.nthreads() > 1
+        results = Vector{Any}(undef, 8)
+        Threads.@threads for i in 1:8
+            results[i] = snopt(
+                x -> (x[1] - 1)^2 + (x[2] - 2)^2,
+                (g, x) -> begin g[1] = 2(x[1] - 1); g[2] = 2(x[2] - 2) end,
+                [0.0, 0.0];
+                lb = -10.0, ub = 10.0,
+                options = ["Major print level" => 0, "Minor print level" => 0]
+            )
+        end
+        @test all(r -> r.status == 1, results)
+        @test all(r -> isapprox(r.x, [1.0, 2.0]; atol = 1.0e-5), results)
+    else
+        @info "single-threaded session; skipping concurrency test"
+        @test true
+    end
+end
+
 @testset "NaN input validation" begin
     silent_options = ["Major print level" => 0, "Minor print level" => 0]
     f = x -> (x[1] - 1)^2

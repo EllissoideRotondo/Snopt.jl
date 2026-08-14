@@ -36,14 +36,16 @@ end
 ```
 
 !!! warning "One active solve per process"
-    SNOPT solves are process-serial: run one solve at a time per Julia process,
-    and use multiple Julia processes for parallel solves. Creating multiple
+    SNOPT keeps one global Fortran session per process, so creating multiple
     [`SnoptWorkspace`](@ref) objects does not make independent solver sessions.
+    When [`initialize`](@ref) is called again, SNOPT.jl closes the previous
+    active workspace before creating the new one.
 
-    When [`initialize`](@ref) is called again, SNOPT.jl closes the previous active
-    workspace before creating the new one. Use the high-level [`snopt`](@ref)
-    entry point or an `initialize do` block unless you specifically need to
-    manage a workspace yourself.
+    Workspace creation and solves are serialized internally, so concurrent calls
+    from several threads are safe; they run one at a time rather than in
+    parallel. Use multiple Julia processes for genuinely parallel solves, and
+    prefer the high-level [`snopt`](@ref) entry point or an `initialize do`
+    block unless you specifically need to manage a workspace yourself.
 
 For larger problems, size the work arrays explicitly. A reasonable rule of thumb is
 

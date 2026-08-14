@@ -62,12 +62,16 @@ and `nnJac` variables that appear nonlinearly in the constraint Jacobian.
 function snmemb(m::Integer, n::Integer, neJ::Integer, negCon::Integer,
                 nnCon::Integer, nnObj::Integer, nnJac::Integer;
                 options=nothing, printfile::String = "", summfile::String = "")
-    ws = initialize(printfile, summfile, SNOPT_MEMORY_WORKSPACE,
-                    SNOPT_MEMORY_WORKSPACE)
-    try
-        apply_options!(ws, options)
-        return snmemb(ws, m, n, neJ, negCon, nnCon, nnObj, nnJac)
-    finally
-        free!(ws)
+    # The temporary workspace, its options, and the estimate are one
+    # transaction; see the note on SNOPT_LOCK in workspace.jl.
+    return lock(SNOPT_LOCK) do
+        ws = initialize(printfile, summfile, SNOPT_MEMORY_WORKSPACE,
+                        SNOPT_MEMORY_WORKSPACE)
+        try
+            apply_options!(ws, options)
+            return snmemb(ws, m, n, neJ, negCon, nnCon, nnObj, nnJac)
+        finally
+            free!(ws)
+        end
     end
 end

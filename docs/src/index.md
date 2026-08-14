@@ -28,8 +28,9 @@ Julia-facing entry point.
     See [Installation](@ref).
 
 !!! note "Concurrency"
-    SNOPT solves are process-serial: run one solve at a time per Julia process,
-    and use multiple Julia processes for parallel solves.
+    SNOPT keeps one global Fortran session per process, so SNOPT.jl serializes
+    solves internally: concurrent calls from several threads are safe, but they
+    run one at a time. Use multiple Julia processes for parallel solves.
 
 ## Quick start
 

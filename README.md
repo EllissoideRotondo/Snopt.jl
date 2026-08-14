@@ -43,8 +43,9 @@ export DYLD_LIBRARY_PATH=/path/to/snopt:$DYLD_LIBRARY_PATH   # macOS
 If the library is not found, the package still loads; `has_snopt()` returns
 `false` and solves raise an informative error.
 
-SNOPT solves are process-serial: run one solve at a time per Julia process, and
-use multiple Julia processes for parallel solves.
+SNOPT keeps one global Fortran session per process, so SNOPT.jl serializes
+solves internally: concurrent calls from several threads are safe, but they run
+one at a time. Use multiple Julia processes for genuinely parallel solves.
 
 ## Usage
 

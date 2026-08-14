@@ -209,6 +209,23 @@ function snopt(eval_obj::Function, eval_grad::Function,
     nnCon = nc
     nnJac = nc > 0 ? n : 0
     nnObj = n
+    # Hold the SNOPT lock across the whole solve, not merely across the
+    # individual calls that take it themselves. The workspace-sizing estimate,
+    # the workspace, its options, and the solve are one transaction: releasing
+    # the lock between them would let another task's `initialize` close this
+    # workspace mid-flight.
+    return lock(SNOPT_LOCK) do
+        snopt_locked(eval_obj, eval_grad, x0_vector, xlow, xupp, nc,
+                     lcon_vector, ucon_vector, eval_con, eval_jac, J32, m_eff,
+                     neJ, negCon, nnCon, nnObj, nnJac, options, callback, snlog,
+                     printfile, summfile, start, name, n)
+    end
+end
+
+function snopt_locked(eval_obj, eval_grad, x0_vector, xlow, xupp, nc,
+                      lcon_vector, ucon_vector, eval_con, eval_jac, J32, m_eff,
+                      neJ, negCon, nnCon, nnObj, nnJac, options, callback, snlog,
+                      printfile, summfile, start, name, n)
     memory = check_memory_estimate(
         snmemb(m_eff, n, neJ, negCon, nnCon, nnObj, nnJac;
                options, printfile, summfile))
