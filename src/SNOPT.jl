@@ -8,11 +8,22 @@ using SparseArrays: SparseMatrixCSC, nnz
 # which is negligible overhead compared to any SNOPT solve.
 global libsnopt7::String = ""
 
+# A library that dlopens is not necessarily usable: SNOPT can be built without
+# the snopt-interface C shims, and then every ccall in this package would fail
+# at solve time instead of at load time. Probe the symbols we actually call.
+const REQUIRED_SNOPT_SYMBOLS = (:f_sninitx, :f_snend, :f_snset, :f_snmem, :f_snoptb)
+
 function loadable_library_path(libpath::AbstractString)
     isempty(libpath) && return ""
     d = Libdl.dlopen_e(libpath)
     d == C_NULL && return ""
-    Libdl.dlclose(d)
+    try
+        for sym in REQUIRED_SNOPT_SYMBOLS
+            Libdl.dlsym_e(d, sym) == C_NULL && return ""
+        end
+    finally
+        Libdl.dlclose(d)
+    end
     return String(libpath)
 end
 
@@ -63,9 +74,9 @@ function find_snopt_lib()
     # /usr/lib, ...), where a bare directory scan above would never look.
     handle = Libdl.dlopen_e(libname)
     if handle != C_NULL
-        libpath = Libdl.dlpath(handle)
+        libpath = String(Libdl.dlpath(handle))
         Libdl.dlclose(handle)
-        return String(libpath)
+        return loadable_library_path(libpath)
     end
     return ""
 end

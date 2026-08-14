@@ -154,6 +154,16 @@ end
     end
 end
 
+@testset "Library discovery rejects a library without the f_* interface" begin
+    @test :f_sninitx in SNOPT.REQUIRED_SNOPT_SYMBOLS
+    @test :f_snoptb in SNOPT.REQUIRED_SNOPT_SYMBOLS
+    # libm loads fine but exports none of SNOPT's C shims.
+    fake = string("libm.", Libdl.dlext)
+    @test SNOPT.loadable_library_path(fake) == ""
+    # The real library still passes.
+    @test SNOPT.loadable_library_path(SNOPT.libsnopt7) == SNOPT.libsnopt7
+end
+
 @testset "SNOPTB memory estimation" begin
     ws = make_ws()
     @test SNOPT.SNOPT_MEMORY_WORKSPACE >= 1000

@@ -26,6 +26,12 @@ You must supply a SNOPT shared library built for your platform:
 | macOS Intel | `libsnopt7.dylib`|
 | Windows  | `libsnopt7.dll`  |
 
+SNOPT.jl targets **SNOPT 7.7**. It reads iteration counters and the reported run
+time from fixed offsets in SNOPT's work arrays, which are internal to that
+release series, so a different major version may load and then report wrong
+counters. The library must also export the snopt-interface `f_*` C entry points;
+a build without them is reported at load time rather than at the first solve.
+
 The most reliable way to point the package at it is the `SNOPTDIR` environment
 variable, set to the **directory** that contains the library:
 
