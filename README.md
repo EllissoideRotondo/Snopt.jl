@@ -14,7 +14,8 @@ as the main Julia-facing entry point.
 `SNOPT.jl` is licensed under the [MIT License](LICENSE). The underlying solver is
 a closed-source commercial product for which you must
 [purchase a license](https://ccom.ucsd.edu/~optimizers/solvers/snopt/); its
-binaries are **not** distributed with this package.
+binaries are **not** distributed with this package. See
+[THIRD_PARTY_NOTICE.md](THIRD_PARTY_NOTICE.md).
 
 ## Installation
 
@@ -31,7 +32,8 @@ SNOPT.has_snopt()   # true once the library is found
 ```
 
 `SNOPTDIR` is the recommended setup on Linux and macOS. If it is unset, SNOPT.jl
-also searches the platform library-path variables:
+also searches the platform library-path variables, then the system loader's
+default paths:
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/snopt:$LD_LIBRARY_PATH
@@ -45,12 +47,6 @@ SNOPT solves are process-serial: run one solve at a time per Julia process, and
 use multiple Julia processes for parallel solves.
 
 ## Usage
-
-For most modeling workflows, the preferred interface is
-[Optimization.jl](https://github.com/SciML/Optimization.jl) through the
-[OptimizationSNOPT.jl](https://github.com/EllissoideRotondo/OptimizationSNOPT.jl)
-wrapper, which exposes SNOPT as a `SnoptOptimizer` algorithm. `SNOPT.jl` itself
-provides a compact API for driving SNOPT directly with Julia callbacks.
 
 The main entry point is `snopt`, which solves a problem through SNOPT's `snOptB`
 interface. You supply an objective `f(x)`, its gradient `g!(g, x)`, and a starting

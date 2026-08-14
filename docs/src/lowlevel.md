@@ -115,12 +115,10 @@ signatures SNOPT expects:
 
 The problem-evaluating builders ([`make_objfun`](@ref), [`make_confun`](@ref),
 [`make_usrfun_a`](@ref), [`make_usrfun_c`](@ref)) take a `callback` keyword for
-per-evaluation monitoring. Leave it at the default `nothing` to skip monitoring with
-no per-evaluation overhead, or pass [`snopt_no_progress`](@ref) as an explicit
-accept-everything callback — note this still builds an event object on each
-evaluation, so only `nothing` truly avoids the overhead. [`make_snlog`](@ref) instead
-takes its callback as a positional argument, and [`make_dummy_confun`](@ref) takes
-none.
+per-evaluation monitoring. Leave it at its default `nothing` to skip monitoring
+entirely, which also avoids building an event object on every evaluation.
+[`make_snlog`](@ref) takes its callback as a positional argument instead, and
+[`make_dummy_confun`](@ref) takes none.
 
 A minimal `snOptB` solve assembled by hand:
 

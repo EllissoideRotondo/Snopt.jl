@@ -1,5 +1,12 @@
 using SNOPT
 using Test
+using Aqua
+
+# Runs first so that it is exercised even when no SNOPT library is present and
+# the solver tests below are skipped.
+@testset "Aqua" begin
+    Aqua.test_all(SNOPT)
+end
 
 if !SNOPT.has_snopt()
     @testset "Missing SNOPT library" begin

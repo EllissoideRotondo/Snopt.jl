@@ -74,9 +74,10 @@ options = [:major_print_level => 0, :minor_print_level => 0]
 ```
 
 Values may be integers, finite floats, strings, or symbols (`Bool` is rejected, to
-avoid silently coercing `true`/`false` to `1`/`0`). String/symbol values are
-appended to the keyword, so `"Hessian" => :limited` sends `"Hessian limited"`.
-Options can also be loaded from a SNOPT specs file with [`read_options`](@ref).
+avoid silently coercing `true`/`false` to `1`/`0`). String and symbol values are
+appended to the keyword, so `:hessian => :limited_memory` sends the SNOPT option
+`"Hessian limited memory"`. Options can also be loaded from a SNOPT specs file
+with [`read_options`](@ref).
 
 A few commonly used keywords:
 
@@ -86,12 +87,14 @@ A few commonly used keywords:
 | `"Major iterations limit"` | SQP iteration cap |
 | `"Major optimality tolerance"` | convergence tolerance |
 | `"Major feasibility tolerance"` | constraint tolerance |
-| `"Derivative option"` | SNOPT derivative-checking mode; the high-level API still requires `eval_grad` and, for constrained problems, `eval_jac` |
+| `"Hessian limited memory"` | limited-memory Hessian, for problems with many variables |
 
-The high-level [`snopt`](@ref) function always asks you for derivative callbacks.
-If you want SNOPT to finite-difference derivatives, use the low-level
-[`SnoptA`](@ref) path with [`make_usrfun_a`](@ref) and configure
-`"Derivative option"` there.
+The full option list is in the
+[SNOPT documentation](https://ccom.ucsd.edu/~optimizers/docs/snopt/options.html).
+
+[`snopt`](@ref) always requires your derivative callbacks. To have SNOPT
+finite-difference the derivatives instead, use the low-level [`SnoptA`](@ref) path
+with [`make_usrfun_a`](@ref) and set `"Derivative option"` to `0` there.
 
 ## Monitoring and early termination
 

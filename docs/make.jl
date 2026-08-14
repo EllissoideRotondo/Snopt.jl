@@ -18,7 +18,6 @@ makedocs(;
         "High-level interface" => "interface.md",
         "Low-level interface" => "lowlevel.md",
         "Examples" => "examples.md",
-        "Optimization.jl integration" => "optimization.md",
         "API reference" => "api.md",
     ],
     # Every exported symbol must appear in an @docs block.

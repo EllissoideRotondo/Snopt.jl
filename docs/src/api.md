@@ -40,6 +40,7 @@ snopta!
 
 ```@docs
 initialize
+SNOPT.SnoptWorkspace
 set_option!
 read_options
 specs_status_message
@@ -65,5 +66,4 @@ These helpers are not exported; access them as `SNOPT.has_snopt`, etc.
 ```@docs
 SNOPT.has_snopt
 SNOPT.find_snopt_lib
-SNOPT.SnoptWorkspace
 ```
