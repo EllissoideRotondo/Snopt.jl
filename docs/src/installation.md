@@ -33,15 +33,18 @@ variable, set to the **directory** that contains the library:
 export SNOPTDIR=/path/to/snopt/lib
 ```
 
-`SNOPTDIR` is the recommended setup on Linux and macOS. If it is unset, SNOPT.jl
-also searches the platform library-path variables:
+`SNOPTDIR` is the recommended setup on Linux and macOS. If it is unset (or set
+but no loadable library is found there, which emits a warning), SNOPT.jl also
+searches the platform library-path variables:
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/snopt/lib:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=/path/to/snopt/lib:$DYLD_LIBRARY_PATH   # macOS
 ```
 
-On Windows, the library is searched on the `PATH`.
+On Windows, the library is searched on the `PATH`. As a last resort the system
+loader's default search paths are tried too, so a `libsnopt7` installed in a
+standard location such as `/usr/lib` is found without any environment variable.
 
 !!! tip "OpenMP companion library"
     If an OpenMP runtime named `libiomp5` sits next to `libsnopt7` in the same

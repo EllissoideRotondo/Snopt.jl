@@ -7,16 +7,22 @@ function snopt_bound_value(value)
     return value
 end
 
+function reject_nan(vector::Vector{Float64}, name::AbstractString)
+    any(isnan, vector) &&
+        throw(ArgumentError("$name must not contain NaN"))
+    return vector
+end
+
 function float_vector(values, name::AbstractString)
     values === nothing && throw(ArgumentError("$name must be provided"))
     values isa Number && throw(ArgumentError("$name must be a vector, not a scalar"))
-    return snopt_bound_value.(collect(values))
+    return reject_nan(snopt_bound_value.(collect(values)), name)
 end
 
 function bound_vector(values, n::Int, default::Float64, name::AbstractString)
     values === nothing && return fill(default, n)
-    values isa Number && return fill(snopt_bound_value(values), n)
-    vector = snopt_bound_value.(collect(values))
+    values isa Number && return reject_nan(fill(snopt_bound_value(values), n), name)
+    vector = reject_nan(snopt_bound_value.(collect(values)), name)
     length(vector) == n ||
         throw(ArgumentError("$name must have length $n; got $(length(vector))"))
     return vector
@@ -93,8 +99,12 @@ end
 
 function preflight_callbacks!(eval_obj::Function, eval_grad::Function,
                               eval_con, eval_jac, x::Vector{Float64},
+                              xlow::Vector{Float64}, xupp::Vector{Float64},
                               nc::Int, J::SparseMatrixCSC, callback)
-    xcheck = copy(x)
+    # SNOPT projects the starting point into the variable bounds before its
+    # first evaluation; do the same here so a domain-limited objective is not
+    # probed at an out-of-bounds x0 that the solver itself would never visit.
+    xcheck = clamp.(x, xlow, xupp)
     f = eval_obj(xcheck)
     if callback !== nothing
         event = (kind = :objective, mode = 0, major_iter = 0, minor_iter = 0,
@@ -161,6 +171,13 @@ Keyword arguments:
     events. Use this for evaluation-level monitoring or early termination.
   * `snlog`: optional callback receiving `SnoptMajorLog` major-iteration events.
     Use this for trace/progress output with meaningful iteration counters.
+  * `start`: SNOPT start mode, `"Cold"` (default), `"Warm"`, or `"Hot"`.
+  * `printfile`, `summfile`: paths for SNOPT's print and summary files; empty
+    strings (the default) suppress them.
+  * `name`: the ≤8-character problem name SNOPT prints.
+
+`x0` must be finite, and bounds may not contain NaN (`±Inf` is mapped to
+SNOPT's infinite-bound value).
 
 """
 function snopt(eval_obj::Function, eval_grad::Function,
@@ -179,6 +196,8 @@ function snopt(eval_obj::Function, eval_grad::Function,
     x0_vector = Float64.(collect(x0))
     n = length(x0_vector)
     n > 0 || throw(ArgumentError("x0 must contain at least one variable"))
+    all(isfinite, x0_vector) ||
+        throw(ArgumentError("x0 must contain only finite values"))
     xlow = bound_vector(lb, n, -SNOPT_INF, "lb")
     xupp = bound_vector(ub, n, SNOPT_INF, "ub")
     nc, lcon_vector, ucon_vector =
@@ -194,7 +213,8 @@ function snopt(eval_obj::Function, eval_grad::Function,
         snmemb(m_eff, n, neJ, negCon, nnCon, nnObj, nnJac;
                options, printfile, summfile))
     preflight_stop = preflight_callbacks!(
-        eval_obj, eval_grad, eval_con, eval_jac, x0_vector, nc, J32, callback)
+        eval_obj, eval_grad, eval_con, eval_jac, x0_vector, xlow, xupp,
+        nc, J32, callback)
     preflight_stop !== nothing &&
         return preflight_stop_result(preflight_stop, n, nc, memory)
     ws = initialize(printfile, summfile, memory.miniw, memory.minrw)

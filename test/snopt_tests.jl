@@ -1,3 +1,4 @@
+using Libdl
 using SparseArrays
 
 # ---------------------------------------------------------------------------
@@ -136,7 +137,19 @@ end
     end
     mktempdir() do dir
         withenv("SNOPTDIR" => dir) do
-            @test SNOPT.find_snopt_lib() == ""
+            # A bad SNOPTDIR now warns and falls back to the platform library
+            # path and the system loader, so on a machine with a system-wide
+            # libsnopt7 the search still succeeds.
+            found = @test_logs (:warn, r"SNOPTDIR is set but no loadable") match_mode=:any begin
+                SNOPT.find_snopt_lib()
+            end
+            syslib = Libdl.dlopen_e(string("lib", "snopt7", ".", Libdl.dlext))
+            if syslib == C_NULL
+                @test found == ""
+            else
+                Libdl.dlclose(syslib)
+                @test !isempty(found)
+            end
         end
     end
 end
@@ -367,7 +380,9 @@ end
     @test SNOPT.SNOPT_STATUS[11]  == :Infeasible_Problem_Detected
     @test SNOPT.SNOPT_STATUS[21]  == :Unbounded_Problem_Detected
     @test SNOPT.SNOPT_STATUS[31]  == :Maximum_Iterations_Exceeded
-    @test SNOPT.SNOPT_STATUS[33]  == :Maximum_Iterations_Exceeded
+    @test SNOPT.SNOPT_STATUS[32]  == :Maximum_Iterations_Exceeded
+    # 33 is "the superbasics limit is too small", not an iteration limit.
+    @test SNOPT.SNOPT_STATUS[33]  == :Superbasics_Limit_Too_Small
     @test SNOPT.SNOPT_STATUS[34]  == :Maximum_CpuTime_Exceeded
     @test SNOPT.SNOPT_STATUS[41]  == :Numerical_Difficulties
     @test SNOPT.SNOPT_STATUS[71]  == :User_Requested_Stop
@@ -866,6 +881,97 @@ end
     status = snopt!(prob)
     @test status == 1
     @test called[]
+end
+
+@testset "NaN input validation" begin
+    silent_options = ["Major print level" => 0, "Minor print level" => 0]
+    f = x -> (x[1] - 1)^2
+    g! = (g, x) -> begin g[1] = 2(x[1] - 1) end
+    @test_throws ArgumentError snopt(f, g!, [NaN]; options = silent_options)
+    @test_throws ArgumentError snopt(f, g!, [Inf]; options = silent_options)
+    @test_throws ArgumentError snopt(f, g!, [0.0]; lb = [NaN], options = silent_options)
+    @test_throws ArgumentError snopt(f, g!, [0.0]; ub = [NaN], options = silent_options)
+    @test_throws ArgumentError snopt(f, g!, [0.0]; lb = NaN, options = silent_options)
+    @test_throws ArgumentError snopt(
+        f, g!, [0.0];
+        eval_con = (c, x) -> begin c[1] = x[1] end,
+        eval_jac = (jnz, x) -> begin jnz[1] = 1.0 end,
+        lcon = [NaN], ucon = [1.0],
+        options = silent_options
+    )
+end
+
+@testset "set_option! rejects non-finite values" begin
+    ws = make_ws()
+    @test_throws ArgumentError set_option!(ws, "Major feasibility tolerance", NaN)
+    @test_throws ArgumentError set_option!(ws, "Major feasibility tolerance", Inf)
+    @test_throws ArgumentError set_option!(ws, "Major feasibility tolerance", -Inf)
+    # A finite value still works after the rejections.
+    @test set_option!(ws, "Major feasibility tolerance", 1e-7) == 0
+end
+
+@testset "Preflight clamps x0 into bounds" begin
+    # sqrt is undefined below 0; SNOPT projects x0 into [lb, ub] before its
+    # first evaluation, and the preflight check must do the same instead of
+    # probing the raw out-of-bounds x0.
+    result = snopt(
+        x -> sqrt(x[1]),
+        (g, x) -> begin g[1] = 0.5 / sqrt(x[1]) end,
+        [-5.0];
+        lb = [1.0], ub = [10.0],
+        options = ["Major print level" => 0, "Minor print level" => 0]
+    )
+    @test result.status == 1
+    @test result.x[1] ≈ 1.0 atol = 1e-6
+end
+
+@testset "Warm start (snOptB)" begin
+    silent_options = ["Major print level" => 0, "Minor print level" => 0]
+    f = x -> (x[1] - 1)^2 + (x[2] - 2)^2
+    g! = (g, x) -> begin g[1] = 2(x[1] - 1); g[2] = 2(x[2] - 2) end
+    cold = snopt(f, g!, [0.0, 0.0]; lb = -10.0, ub = 10.0, options = silent_options)
+    @test cold.status == 1
+    warm = snopt(f, g!, cold.x; lb = -10.0, ub = 10.0, options = silent_options,
+                 start = "Warm")
+    @test warm.status == 1
+    @test warm.x ≈ cold.x atol = 1e-6
+end
+
+@testset "Warm start (snOptA)" begin
+    ws = make_ws()
+    set_option!(ws, "Derivative option", 1)
+    usrfun = make_usrfun_a(
+        (F, x) -> begin F[1] = (x[1] - 2)^2 end;
+        eval_G = (G, x) -> begin G[1] = 2(x[1] - 2) end
+    )
+    prob = SnoptA(
+        ws, 1, 1, 0.0, 1,
+        Int32[], Int32[], Float64[],
+        Int32[1], Int32[1],
+        [-10.0], [10.0],
+        [-1.0e20], [1.0e20],
+        [0.0], zeros(Int32, 1), zeros(1),
+        zeros(1), zeros(Int32, 1), zeros(1),
+        0, 0, 0, 0.0,
+        usrfun
+    )
+    @test snopta!(prob) == 1
+    @test prob.x[1] ≈ 2.0 atol = 1e-4
+    # Re-solve from the solution with SNOPT's warm start (integer code 2 for
+    # snOptA; code 1 would request a basis-file start).
+    @test snopta!(prob; start = "Warm") == 1
+    @test prob.x[1] ≈ 2.0 atol = 1e-4
+    @test_throws ArgumentError snopta!(prob; start = "Tepid")
+end
+
+@testset "Direct SnoptWorkspace close without initialize" begin
+    # A workspace that never went through f_sninitx (init_id == 0) must not
+    # call f_snend on its zeroed work arrays during finalization.
+    ws = SNOPT.SnoptWorkspace(500, 500)
+    @test isopen(ws)
+    @test ws.init_id == 0
+    close(ws)
+    @test !isopen(ws)
 end
 
 @testset "User-requested stop via progress callback" begin

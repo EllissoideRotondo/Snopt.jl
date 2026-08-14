@@ -27,6 +27,14 @@ copy_cdouble_vector(ptr::Ptr{Cdouble}, len::Integer) =
 copy_cint32_vector(ptr::Ptr{Cint}, len::Integer) =
     len <= 0 ? Int32[] : copy(unsafe_wrap(Array, ptr, Int(len)))
 
+# Exception plumbing has two deliberate layers. Each callback closure built by
+# make_objfun/make_confun/make_usrfun_*/make_snlog catches errors raised by the
+# user's Julia functions and records them in its own SnoptCallbackState (carried
+# by StatefulCallback). The @cfunction trampolines below add a second net: they
+# catch anything that escapes the closure or fails while resolving the
+# active-callback registry, recording it in ActiveSnopt*Callbacks.exception.
+# Both layers are rethrown on the Julia side after the ccall returns; neither
+# may ever let an exception unwind through the Fortran frames.
 mutable struct SnoptCallbackState
     exception::Any
 end

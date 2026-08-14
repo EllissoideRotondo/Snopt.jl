@@ -20,16 +20,22 @@ end
     find_snopt_lib() -> String
 
 Search for a loadable `libsnopt7` and return its absolute path, or an empty string
-if none is found. The search checks `SNOPTDIR` first, then the platform library
-path (`LD_LIBRARY_PATH`, also `DYLD_LIBRARY_PATH` on macOS, or `PATH` on Windows).
-This is run once during `__init__` to set the global `SNOPT.libsnopt7`; call it
-directly to diagnose why a library is not being picked up. See also [`has_snopt`](@ref).
+if none is found. The search checks `SNOPTDIR` first (warning if it is set but the
+library there cannot be loaded), then the platform library path
+(`LD_LIBRARY_PATH`, also `DYLD_LIBRARY_PATH` on macOS, or `PATH` on Windows), and
+finally the system loader's default search paths (for example `/usr/lib` via
+`ld.so` on Linux). This is run once during `__init__` to set the global
+`SNOPT.libsnopt7`; call it directly to diagnose why a library is not being picked
+up. See also [`has_snopt`](@ref).
 """
 function find_snopt_lib()
     libname = string("lib", "snopt7", ".", Libdl.dlext)
     snoptdir = get(ENV, "SNOPTDIR", "")
     if !isempty(snoptdir)
-        return loadable_library_path(joinpath(snoptdir, libname))
+        libpath = loadable_library_path(joinpath(snoptdir, libname))
+        isempty(libpath) || return libpath
+        @warn "SNOPTDIR is set but no loadable SNOPT library was found there; " *
+              "falling back to the platform library path" SNOPTDIR = snoptdir libname
     end
 
     paths_to_try = String[]
@@ -51,6 +57,15 @@ function find_snopt_lib()
         if !isempty(libpath)
             return libpath
         end
+    end
+
+    # Last resort: let the system loader search its default paths (ld.so cache,
+    # /usr/lib, ...), where a bare directory scan above would never look.
+    handle = Libdl.dlopen_e(libname)
+    if handle != C_NULL
+        libpath = Libdl.dlpath(handle)
+        Libdl.dlclose(handle)
+        return String(libpath)
     end
     return ""
 end

@@ -28,9 +28,11 @@ function free!(prob::SnoptWorkspace)
     if !isempty(libsnopt7)
         # Only call f_snend for the workspace that last called f_sninitx. Any
         # older workspace that gets GC'd after being superseded skips the
-        # Fortran call.
+        # Fortran call, as does a workspace that never went through f_sninitx
+        # at all (init_id == 0): calling snEnd on uninitialized work arrays
+        # would make Fortran read garbage file-unit numbers.
         id = prob.init_id
-        should_end = id == 0 || Threads.atomic_cas!(_SNOPT_ACTIVE_ID, id, 0) == id
+        should_end = id != 0 && Threads.atomic_cas!(_SNOPT_ACTIVE_ID, id, 0) == id
         if should_end
             try
                 ccall((:f_snend, libsnopt7),
@@ -81,10 +83,10 @@ const RW_RUN_TIME   = 462  # rw(462): CPU run time in seconds    - SNOPT 7.7 rw 
 
 workspace_value(ws_rw::Vector{Float64}, index::Int) =
     length(ws_rw) >= index ? max(ws_rw[index], 0.0) : 0.0
-# The MinGW Windows wrapper expects genuinely empty filenames here.
-# Replacing them with "NUL" leaves the workspace partially initialized and the
-# first solve can fail with bogus storage errors.
 
+# On Windows the MinGW wrapper expects genuinely empty filenames for suppressed
+# output channels; replacing them with "NUL" leaves the workspace partially
+# initialized and the first solve can fail with bogus storage errors.
 const SNOPT_DEVNULL = Sys.iswindows() ? "" : "/dev/null"
 
 snopt_output_file(path::String) = isempty(path) ? SNOPT_DEVNULL : path
@@ -130,7 +132,7 @@ const SNOPT_STATUS = Dict(
     22 => :Unbounded_Problem_Detected,
     31 => :Maximum_Iterations_Exceeded,
     32 => :Maximum_Iterations_Exceeded,
-    33 => :Maximum_Iterations_Exceeded,
+    33 => :Superbasics_Limit_Too_Small,
     34 => :Maximum_CpuTime_Exceeded,
     41 => :Numerical_Difficulties,
     42 => :Numerical_Difficulties,
@@ -200,7 +202,14 @@ function initialize(printfile::String, summfile::String, leniw::Int, lenrw::Int)
            Ptr{Cint}, Cint, Ptr{Cdouble}, Cint),
           printpath, Cint(ncodeunits(printpath)), summpath, Cint(ncodeunits(summpath)),
           prob.iw, prob.leniw, prob.rw, prob.lenrw)
-    reset_snopt_defaults!(prob)
+    try
+        reset_snopt_defaults!(prob)
+    catch
+        # Failed initialization must not leave a half-set-up workspace claiming
+        # the active SNOPT session.
+        free!(prob)
+        rethrow()
+    end
     _SNOPT_ACTIVE_WORKSPACE[] = prob
     return prob
 end

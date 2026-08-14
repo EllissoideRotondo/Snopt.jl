@@ -106,6 +106,8 @@ function set_option!(prob::SnoptWorkspace, keyword::String, value::Float64)
     require_open_workspace(prob, "set_option!")
     isempty(strip(keyword)) &&
         throw(ArgumentError("SNOPT option keyword must not be empty or whitespace-only"))
+    isfinite(value) ||
+        throw(ArgumentError("SNOPT option $(repr(keyword)) requires a finite value, got $value"))
     errors = Int32[0]
     ccall((:f_snsetr, libsnopt7), Cvoid,
           (Cstring, Cint, Cdouble, Ptr{Cint},

@@ -46,10 +46,11 @@ use multiple Julia processes for parallel solves.
 
 ## Usage
 
-For most modeling workflows, the preferred interface will be
-[Optimization.jl](https://github.com/SciML/Optimization.jl). Support for that
-interface is currently in progress. `SNOPT.jl` itself provides a compact API for
-driving SNOPT directly with Julia callbacks.
+For most modeling workflows, the preferred interface is
+[Optimization.jl](https://github.com/SciML/Optimization.jl) through the
+[OptimizationSNOPT.jl](https://github.com/EllissoideRotondo/OptimizationSNOPT.jl)
+wrapper, which exposes SNOPT as a `SnoptOptimizer` algorithm. `SNOPT.jl` itself
+provides a compact API for driving SNOPT directly with Julia callbacks.
 
 The main entry point is `snopt`, which solves a problem through SNOPT's `snOptB`
 interface. You supply an objective `f(x)`, its gradient `g!(g, x)`, and a starting

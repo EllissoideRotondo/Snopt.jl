@@ -19,7 +19,12 @@ if !SNOPT.has_snopt()
         @test occursin("SNOPT library not loaded", msg)
         @test occursin("SNOPTDIR", msg)
     end
-    @info "SNOPT.jl: SNOPT library not found, skipping solver tests."
+    if get(ENV, "SNOPT_REQUIRE_LIBRARY", "") == "true"
+        error("SNOPT_REQUIRE_LIBRARY=true but no loadable libsnopt7 was found; " *
+              "solver tests cannot run.")
+    end
+    @warn "SNOPT.jl: SNOPT library not found — ALL SOLVER TESTS SKIPPED. " *
+          "Set SNOPTDIR (or install libsnopt7 on the loader path) to run the full suite."
     exit(0)
 end
 

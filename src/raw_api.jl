@@ -105,7 +105,7 @@ function snopta!(prob::SnoptA; start::String = "Cold", name::String = "Julia")
                    Ptr{Cint}, Ptr{Cint},
                    Ptr{Cint}, Cint, Ptr{Cdouble}, Cint,
                    Ptr{Cint}, Cint, Ptr{Cdouble}, Cint),
-                  start_mode_code(start), name,
+                  start_mode_code_a(start), name,
                   prob.nf, prob.n, prob.objadd, prob.objrow,
                   usr_callback,
                   prob.iAfun, prob.jAvar, length(prob.A), prob.A,

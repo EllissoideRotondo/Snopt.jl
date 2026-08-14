@@ -13,7 +13,11 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    # GitHub-hosted runners have no SNOPT license/library, so runtests.jl skips
+    # every solver assertion: this job only checks that the package loads and
+    # that the no-library paths behave. The full suite runs locally (Linux +
+    # Windows VM) against a licensed libsnopt7.
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} (no solver lib)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

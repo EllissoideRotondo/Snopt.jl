@@ -1,8 +1,21 @@
+# snopt-interface's f_snoptb/f_snoptc/f_snkerb/f_snkerc map their integer start
+# argument as 1 => 'Warm', 2 => 'Hot', anything else => 'Cold'.
 function start_mode_code(start::AbstractString)::Cint
     key = lowercase(strip(start))
     key == "cold" && return Cint(0)
     key == "warm" && return Cint(1)
     key == "hot"  && return Cint(2)
+    throw(ArgumentError("SNOPT start mode must be Cold, Warm, or Hot; got $(repr(start))"))
+end
+
+# f_snopta forwards its integer start argument unchanged to snOptA, which uses
+# 0 = Cold, 1 = Basis file, 2 = Warm, 3 = Hot — a different convention from the
+# snOptB/snOptC wrappers above.
+function start_mode_code_a(start::AbstractString)::Cint
+    key = lowercase(strip(start))
+    key == "cold" && return Cint(0)
+    key == "warm" && return Cint(2)
+    key == "hot"  && return Cint(3)
     throw(ArgumentError("SNOPT start mode must be Cold, Warm, or Hot; got $(repr(start))"))
 end
 
