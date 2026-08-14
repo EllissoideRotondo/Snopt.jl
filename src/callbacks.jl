@@ -84,9 +84,11 @@ abstract type AbstractActiveSnoptCallbacks end
 
 mutable struct ActiveSnoptACallbacks <: AbstractActiveSnoptCallbacks
     usrfun::Any
+    snlog::Any
     exception::Any
 end
-ActiveSnoptACallbacks(usrfun) = ActiveSnoptACallbacks(usrfun, nothing)
+ActiveSnoptACallbacks(usrfun; snlog=nothing) =
+    ActiveSnoptACallbacks(usrfun, snlog, nothing)
 
 mutable struct ActiveSnoptBCallbacks <: AbstractActiveSnoptCallbacks
     confun::Any

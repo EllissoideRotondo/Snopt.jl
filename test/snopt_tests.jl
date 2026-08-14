@@ -352,6 +352,34 @@ end
     @test SNOPT.active_snopt_callback_count() == 0
 end
 
+@testset "snLog major iteration callback on SnoptA" begin
+    ws = make_ws()
+    set_option!(ws, "Derivative option", 1)
+    collector = SnoptLogCollector(SnoptMajorLog[])
+    usrfun = make_usrfun_a(
+        (F, x) -> begin F[1] = (x[1] - 2)^2 + (x[2] - 3)^2 end;
+        eval_G = (G, x) -> begin G[1] = 2(x[1] - 2); G[2] = 2(x[2] - 3) end
+    )
+    prob = SnoptA(
+        ws, 1, 2, 0.0, 1,
+        Int32[], Int32[], Float64[],
+        Int32[1, 1], Int32[1, 2],
+        [-10.0, -10.0], [10.0, 10.0],
+        [-1.0e20], [1.0e20],
+        [0.0, 0.0], zeros(Int32, 2), zeros(2),
+        zeros(1), zeros(Int32, 1), zeros(1),
+        0, 0, 0, 0.0,
+        usrfun
+    )
+    status = snopta!(prob; snlog = collector)
+    @test status == 1
+    @test prob.x[1] ≈ 2.0 atol = 1.0e-4
+    @test prob.x[2] ≈ 3.0 atol = 1.0e-4
+    @test !isempty(collector.logs)
+    @test collector.logs[end] isa SnoptMajorLog
+    @test SNOPT.active_snopt_callback_count() == 0
+end
+
 @testset "SnoptA finite-difference gradients (eval_G=nothing)" begin
     ws = make_ws()
     set_option!(ws, "Derivative option", 0)

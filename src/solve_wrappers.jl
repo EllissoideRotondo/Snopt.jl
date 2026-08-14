@@ -27,9 +27,8 @@ Solve a low-level problem in place, dispatching on its type to [`snopta!`](@ref)
 `obj_val`, multipliers, and final `x`) are overwritten and the SNOPT inform code is
 returned. `start` selects the SNOPT start mode (`"Cold"`, `"Warm"`, or `"Hot"`),
 `name` is the ≤8-character problem name SNOPT prints, and `snlog` is an optional
-major-iteration callback. `snlog` is honored by the `SnoptB` and `SnoptC` methods;
-on the `SnoptA` method it is accepted for signature uniformity but ignored, since
-`snOptA` has no major-iteration log hook.
+major-iteration callback honored by all three methods; supplying it routes the
+solve through SNOPT's matching `snKerA`/`snKerB`/`snKerC` kernel.
 """
 function snopt!(prob::SnoptB; start::String = "Cold", name::String = "Julia",
                 snlog=nothing)
@@ -65,9 +64,7 @@ end
 
 function snopt!(prob::SnoptA; start::String = "Cold", name::String = "Julia",
                 snlog=nothing)
-    # snOptA has no major-iteration log hook; snlog is accepted for signature
-    # uniformity with the SnoptB/SnoptC methods and ignored.
-    return snopta!(prob; start, name)
+    return snopta!(prob; start, name, snlog)
 end
 
 function snopt!(prob::SnoptC; start::String = "Cold", name::String = "Julia",
