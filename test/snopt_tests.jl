@@ -1066,16 +1066,39 @@ end
     @test result.x[1] ≈ 1.0 atol = 1e-6
 end
 
-@testset "Warm start (snOptB)" begin
-    silent_options = ["Major print level" => 0, "Minor print level" => 0]
-    f = x -> (x[1] - 1)^2 + (x[2] - 2)^2
-    g! = (g, x) -> begin g[1] = 2(x[1] - 1); g[2] = 2(x[2] - 2) end
-    cold = snopt(f, g!, [0.0, 0.0]; lb = -10.0, ub = 10.0, options = silent_options)
-    @test cold.status == 1
-    warm = snopt(f, g!, cold.x; lb = -10.0, ub = 10.0, options = silent_options,
-                 start = "Warm")
+@testset "Warm start reuses a basis and costs no more iterations" begin
+    silent = ["Major print level" => 0, "Minor print level" => 0]
+    f  = x -> (x[1] - 1)^2 + (x[2] - 2)^2 + 0.5 * (x[1] * x[2] - 2)^2
+    g! = (g, x) -> begin
+        g[1] = 2(x[1] - 1) + (x[1] * x[2] - 2) * x[2]
+        g[2] = 2(x[2] - 2) + (x[1] * x[2] - 2) * x[1]
+    end
+
+    solved = snopt(f, g!, [0.0, 0.0]; lb = -10.0, ub = 10.0, options = silent)
+    @test solved.status == 1
+    @test solved.basis isa SnoptBasis
+    @test length(solved.basis.hs) == 2 + 1
+    @test solved.basis.n == 2
+    @test solved.basis.m == 1
+
+    perturbed = solved.x .+ 0.25
+    cold = snopt(f, g!, perturbed; lb = -10.0, ub = 10.0, options = silent)
+    warm = snopt(f, g!, perturbed; lb = -10.0, ub = 10.0, options = silent,
+                 start = "Warm", basis = solved.basis)
     @test warm.status == 1
-    @test warm.x ≈ cold.x atol = 1e-6
+    @test warm.x ≈ cold.x atol = 1.0e-5
+    @test warm.major_itns <= cold.major_itns
+
+    # A basis whose dimensions do not match the problem is rejected.
+    @test_throws ArgumentError snopt(f, g!, [0.0, 0.0, 0.0];
+        lb = -10.0, ub = 10.0, options = silent,
+        start = "Warm", basis = solved.basis)
+    # A warm start without a basis is rejected rather than silently going cold.
+    @test_throws ArgumentError snopt(f, g!, perturbed;
+        lb = -10.0, ub = 10.0, options = silent, start = "Warm")
+    # A basis passed to a cold start is a mistake worth reporting.
+    @test_throws ArgumentError snopt(f, g!, perturbed;
+        lb = -10.0, ub = 10.0, options = silent, basis = solved.basis)
 end
 
 @testset "Warm start (snOptA)" begin

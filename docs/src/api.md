@@ -12,6 +12,7 @@ CurrentModule = SNOPT
 ```@docs
 snopt
 SnoptResult
+SnoptBasis
 SnoptMajorLog
 SnoptMemory
 SNOPT_STATUS

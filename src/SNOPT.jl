@@ -117,6 +117,7 @@ export SnoptA
 export SnoptB
 export SnoptC
 export AbstractSnoptProblem
+export SnoptBasis
 export SnoptMajorLog
 export SnoptMemory
 export SnoptProblem

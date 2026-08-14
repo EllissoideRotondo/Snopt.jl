@@ -124,8 +124,24 @@ snopt(f, g!, x0;
 |-------------|----------|---------|
 | `printfile` | `""`     | path for SNOPT's detailed print output (empty = suppressed) |
 | `summfile`  | `""`     | path for SNOPT's summary output |
-| `start`     | `"Cold"` | `"Cold"`, `"Warm"`, or `"Hot"` start |
+| `start`     | `"Cold"` | `"Cold"`, or `"Warm"`/`"Hot"` together with `basis` |
+| `basis`     | `nothing`| a [`SnoptBasis`](@ref) from a previous result; required for a warm or hot start |
 | `name`      | `"Julia"`| ≤8-character problem name shown in SNOPT output |
+
+### Warm starts
+
+A warm start reuses the basis SNOPT ended the previous solve with, which saves
+iterations when you re-solve a slightly changed problem — a new parameter value,
+a nudged starting point:
+
+```julia
+first  = snopt(f, g!, x0)
+second = snopt(f, g!, x0; start = "Warm", basis = first.basis)
+```
+
+The basis records the problem dimensions it was built for, and `snopt` rejects
+one that does not match the problem at hand. Asking for a warm start without a
+basis is an error rather than a silent cold start.
 
 ## The result
 
@@ -143,6 +159,7 @@ result.iterations      # total minor iterations
 result.major_itns      # total major iterations
 result.run_time        # SNOPT-reported solve time (s)
 result.memory          # the SnoptMemory estimate used to size the workspace
+result.basis           # the final SnoptBasis, for a later warm start
 ```
 
 Map an inform code to its symbolic meaning through [`SNOPT_STATUS`](@ref).

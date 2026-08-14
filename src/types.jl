@@ -191,6 +191,21 @@ struct SnoptMemory
 end
 
 """
+    SnoptBasis
+
+The basis SNOPT ended a solve with: the basis-status array `hs` for the extended
+problem, the number of superbasic variables `nS`, and the problem dimensions
+`n`/`m` they belong to. Pass one back to [`snopt`](@ref) as
+`start = "Warm", basis = result.basis` to warm-start a closely related solve.
+"""
+struct SnoptBasis
+    hs::Vector{Int32}
+    nS::Int
+    n::Int
+    m::Int
+end
+
+"""
     SnoptResult
 
 Outcome of a high-level [`snopt`](@ref) solve. Fields:
@@ -206,6 +221,7 @@ Outcome of a high-level [`snopt`](@ref) solve. Fields:
   * `iterations`, `major_itns`: total minor and major iteration counts.
   * `run_time`: SNOPT-reported solve time in seconds.
   * `memory`: the [`SnoptMemory`](@ref) estimate used to size the workspace.
+  * `basis`: the final [`SnoptBasis`](@ref), for warm-starting a later solve.
 """
 struct SnoptResult
     status::Int
@@ -219,6 +235,7 @@ struct SnoptResult
     major_itns::Int
     run_time::Float64
     memory::SnoptMemory
+    basis::SnoptBasis
 end
 
 """
