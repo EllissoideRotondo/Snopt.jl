@@ -113,14 +113,17 @@ signatures SNOPT expects:
 | [`make_dummy_confun`](@ref) | `snOptB` | no-op constraints for unconstrained problems |
 | [`make_usrfun_c`](@ref) | `snOptC` | combined objective + constraint evaluation |
 | [`make_usrfun_a`](@ref) | `snOptA` | `eval_F(F, x)` and optional `eval_G(G, x)` |
-| [`make_snlog`](@ref) | `snOptB`/`snOptC` | a `snLog` hook delivering [`SnoptMajorLog`](@ref) events |
+| [`make_snlog`](@ref) | all three | a `snLog` hook delivering [`SnoptMajorLog`](@ref) events |
+| [`make_snstop`](@ref) | all three | a `snSTOP` hook delivering [`SnoptStopEvent`](@ref) events |
 
 The problem-evaluating builders ([`make_objfun`](@ref), [`make_confun`](@ref),
 [`make_usrfun_a`](@ref), [`make_usrfun_c`](@ref)) take a `callback` keyword for
 per-evaluation monitoring. Leave it at its default `nothing` to skip monitoring
 entirely, which also avoids building an event object on every evaluation.
-[`make_snlog`](@ref) takes its callback as a positional argument instead, and
-[`make_dummy_confun`](@ref) takes none.
+[`make_snlog`](@ref) and [`make_snstop`](@ref) take their callback as a
+positional argument instead, and [`make_dummy_confun`](@ref) takes none. The
+solvers build these two for you when you pass `snlog`/`snstop`; call the builders
+directly only when driving SNOPT's kernels yourself.
 
 A minimal `snOptB` solve assembled by hand:
 

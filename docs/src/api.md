@@ -14,6 +14,7 @@ snopt
 SnoptResult
 SnoptBasis
 SnoptMajorLog
+SnoptStopEvent
 SnoptMemory
 SNOPT_STATUS
 ```
@@ -57,6 +58,7 @@ make_dummy_confun
 make_usrfun_c
 make_usrfun_a
 make_snlog
+make_snstop
 snopt_no_progress
 ```
 

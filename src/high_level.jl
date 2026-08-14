@@ -173,6 +173,9 @@ Keyword arguments:
     events. Use this for evaluation-level monitoring or early termination.
   * `snlog`: optional callback receiving `SnoptMajorLog` major-iteration events.
     Use this for trace/progress output with meaningful iteration counters.
+  * `snstop`: optional callback receiving `SnoptStopEvent` major-iteration events.
+    Return `false` from it to stop SNOPT; the solve then reports inform code 74
+    (`:User_Requested_Stop`). Use this for custom termination criteria.
   * `start`: SNOPT start mode, `"Cold"` (default), `"Warm"`, or `"Hot"`. A warm
     or hot start also requires `basis`.
   * `basis`: a [`SnoptBasis`](@ref) from a previous result, reused as the
@@ -194,6 +197,7 @@ function snopt(eval_obj, eval_grad,
                options=nothing,
                callback=nothing,
                snlog=nothing,
+               snstop=nothing,
                printfile::String = "",
                summfile::String = "",
                start::String = "Cold",
@@ -225,7 +229,8 @@ function snopt(eval_obj, eval_grad,
         snopt_locked(eval_obj, eval_grad, x0_vector, xlow, xupp, nc,
                      lcon_vector, ucon_vector, eval_con, eval_jac, J32, m_eff,
                      neJ, negCon, nnCon, nnObj, nnJac, options, callback, snlog,
-                     printfile, summfile, start, name, n, hs_start, nS_start)
+                     snstop, printfile, summfile, start, name, n, hs_start,
+                     nS_start)
     end
 end
 
@@ -255,7 +260,8 @@ end
 function snopt_locked(eval_obj, eval_grad, x0_vector, xlow, xupp, nc,
                       lcon_vector, ucon_vector, eval_con, eval_jac, J32, m_eff,
                       neJ, negCon, nnCon, nnObj, nnJac, options, callback, snlog,
-                      printfile, summfile, start, name, n, hs_start, nS_start)
+                      snstop, printfile, summfile, start, name, n, hs_start,
+                      nS_start)
     memory = check_memory_estimate(
         snmemb(m_eff, n, neJ, negCon, nnCon, nnObj, nnJac;
                options, printfile, summfile))
@@ -275,7 +281,7 @@ function snopt_locked(eval_obj, eval_grad, x0_vector, xlow, xupp, nc,
         bu = [xupp; nc > 0 ? ucon_vector : [SNOPT_INF]]
         prob = SnoptB(ws, n, nc, m_eff, n, x, bl, bu, hs_start, J32,
                       0.0, 0, Float64[], objfun, confun, nS_start)
-        snoptb!(prob; start, name, snlog)
+        snoptb!(prob; start, name, snlog, snstop)
         return snopt_result(prob, memory)
     finally
         free!(ws)

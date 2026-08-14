@@ -98,25 +98,37 @@ with [`make_usrfun_a`](@ref) and set `"Derivative option"` to `0` there.
 
 ## Monitoring and early termination
 
-Two independent hooks are available:
+Three independent hooks are available:
 
 - **`snlog`** receives a [`SnoptMajorLog`](@ref) once per *major* iteration, with
   meaningful iteration counters and the current point, objective, infeasibilities,
   and multipliers. Use it for trace/progress output.
+- **`snstop`** receives a [`SnoptStopEvent`](@ref), also once per major iteration.
+  It carries everything `snlog` carries plus the gradients (`gobj`, `gcon`), the
+  row multipliers (`pi`), the reduced costs (`rc`), and the reduced gradient
+  (`rg`). This is SNOPT's own termination hook, so it is the natural place for
+  custom stopping criteria such as a wall-clock budget or a target objective.
 - **`callback`** fires on each objective/constraint *evaluation* (which may happen
   several times per major iteration). It receives a `NamedTuple` event with fields
   such as `kind` (`:objective` or `:constraint`), `mode`, `major_iter`,
   `minor_iter`, `x`, and `f` or `c`.
 
-Returning `false` from either hook requests SNOPT to stop; the resulting
+Returning `false` from any of them requests SNOPT to stop; the resulting
 [`SnoptResult`](@ref) then carries a `:User_Requested_Stop` status.
 
 ```julia
+deadline = time() + 30
+
 snopt(f, g!, x0;
     snlog = ev -> (println("major $(ev.major_iter): f = $(ev.objective)"); true),
+    snstop = ev -> time() < deadline,
     callback = ev -> ev.kind === :objective ? ev.f < 1e6 : true,
 )
 ```
+
+`snlog` and `snstop` route the solve through SNOPT's `snKerA`/`snKerB`/`snKerC`
+kernels, which is transparent to the caller; the hooks you do not pass keep
+SNOPT's own default routines.
 
 ## Output files and start mode
 

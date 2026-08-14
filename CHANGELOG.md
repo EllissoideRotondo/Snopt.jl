@@ -4,6 +4,7 @@
 
 ### Breaking
 
+- Minimum Julia version is now 1.10 (1.9 reached end of life).
 - `SnoptResult` gained a `basis` field, and `SnoptB`/`SnoptC` gained a trailing
   `nS` field. The previous positional constructors for the problem types still
   work and default `nS` to `0`, so existing code that builds them by hand is
@@ -16,6 +17,12 @@
 - `SnoptBasis` and the `basis` keyword of `snopt`, which make `start = "Warm"`
   and `start = "Hot"` reuse the previous basis instead of silently starting cold.
 - `snlog` now works on `SnoptA` solves, through SNOPT's `snKerA` kernel.
+- `snstop`, SNOPT's `snSTOP` termination hook, is available on `snopt`, `snopt!`,
+  `snopta!`, `snoptb!`, and `snoptc!`. It delivers a `SnoptStopEvent` per major
+  iteration - everything `snlog` reports plus the objective gradient, Jacobian
+  values, row multipliers, reduced costs, and reduced gradient - and returning
+  `false` from it stops the solve with `:User_Requested_Stop`. Use it for custom
+  termination criteria.
 - Objective, gradient, and constraint callbacks accept any callable object, not
   only `Function` subtypes.
 

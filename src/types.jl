@@ -296,3 +296,69 @@ struct SnoptMajorLog
     ycon::Vector{Float64}
     hs::Vector{Int32}
 end
+
+"""
+    SnoptStopEvent
+
+Snapshot of SNOPT's state at the end of a major iteration, delivered to the
+`snstop` callback of [`snopt`](@ref) (and built internally by
+[`make_snstop`](@ref)). SNOPT calls its `snSTOP` hook once per major iteration
+specifically so the caller can inspect the current iterate and decide whether to
+keep going, which makes it the place to implement custom termination criteria
+(wall-clock budgets, target objective values, external cancellation).
+
+`SnoptStopEvent` carries everything [`SnoptMajorLog`](@ref) carries plus the
+quantities SNOPT only exposes through `snSTOP`:
+
+  * `m`, `max_superbasics`, `negcon`: problem dimensions of the extended problem.
+  * `gobj`, `gcon`: current objective gradient and constraint Jacobian values.
+  * `fx`: the row values of the nonlinear constraints, alongside `fcon`.
+  * `pi`, `rc`, `rg`: multipliers for the rows, reduced costs for all extended
+    variables, and the reduced gradient of the superbasics.
+  * `bl`, `bu`: the bounds SNOPT is currently working with (after scaling).
+
+Return `false` from the callback to make SNOPT stop; the solve then finishes with
+inform code 74 (`:User_Requested_Stop`). Any other return value lets SNOPT
+continue.
+"""
+struct SnoptStopEvent
+    iteration::Int
+    major_iter::Int
+    minor_iter::Int
+    n_superbasics::Int
+    max_superbasics::Int
+    n_swaps::Int
+    objective::Float64
+    merit::Float64
+    penalty_norm::Float64
+    step::Float64
+    primal_infeasibility::Float64
+    dual_infeasibility::Float64
+    max_violation::Float64
+    relative_violation::Float64
+    condition_hessian::Float64
+    objective_scale::Float64
+    objective_add::Float64
+    f_objective::Float64
+    f_merit::Float64
+    minimize::Int
+    m::Int
+    n::Int
+    nb::Int
+    nncon::Int
+    nnobj::Int
+    negcon::Int
+    kt_conditions::NTuple{2, Bool}
+    x::Vector{Float64}
+    bl::Vector{Float64}
+    bu::Vector{Float64}
+    fcon::Vector{Float64}
+    fx::Vector{Float64}
+    gcon::Vector{Float64}
+    gobj::Vector{Float64}
+    ycon::Vector{Float64}
+    pi::Vector{Float64}
+    rc::Vector{Float64}
+    rg::Vector{Float64}
+    hs::Vector{Int32}
+end

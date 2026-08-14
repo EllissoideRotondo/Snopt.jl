@@ -122,7 +122,9 @@ export SnoptMajorLog
 export SnoptMemory
 export SnoptProblem
 export SnoptResult
+export SnoptStopEvent
 export make_snlog
+export make_snstop
 export snopt
 export snopt!
 export snopta!

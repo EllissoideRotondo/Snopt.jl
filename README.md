@@ -82,14 +82,19 @@ Key points of the low-level interface:
   `"Major print level" => 0`). Options can also be read from a specs file with
   `read_options`.
 - **Monitoring.** `snlog` receives a `SnoptMajorLog` per major iteration (counters,
-  objective, infeasibilities, the current point); the lower-level `callback` keyword
-  fires on each objective/constraint evaluation. Returning `false` from either
-  requests early termination.
+  objective, infeasibilities, the current point) and `snstop` receives a
+  `SnoptStopEvent` (the same, plus gradients, multipliers, and reduced costs) from
+  SNOPT's own termination hook; the lower-level `callback` keyword fires on each
+  objective/constraint evaluation. Returning `false` from any of them requests
+  early termination.
 
 ```julia
+deadline = time() + 30
+
 result = snopt(f, g!, x0;
     options = ["Major print level" => 1],
     snlog = event -> (println("major $(event.major_iter): f = $(event.objective)"); true),
+    snstop = event -> time() < deadline,
 )
 ```
 
@@ -97,7 +102,7 @@ Beyond `snopt`, the package exports the `snOptA`/`snOptB`/`snOptC` problem types
 (`SnoptA`, `SnoptB`/`SnoptProblem`, `SnoptC`), their in-place solvers (`snopta!`,
 `snoptb!`, `snoptc!`, `snopt!`), workspace management (`initialize`, `set_option!`,
 `snmemb`), and callback builders (`make_objfun`, `make_confun`, `make_usrfun_a`,
-`make_usrfun_c`, `make_snlog`). See the
+`make_usrfun_c`, `make_snlog`, `make_snstop`). See the
 [documentation](https://EllissoideRotondo.github.io/SNOPT.jl/stable) and the
 [`examples/`](examples) directory (`hs71.jl`, `unconstrained.jl`) for full worked
 problems.

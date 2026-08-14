@@ -59,6 +59,57 @@ function (collector::SnoptLogCollector)(event)
     return true
 end
 
+# Collects snSTOP events and optionally asks SNOPT to stop once `stop_after`
+# major iterations have been seen.
+mutable struct SnoptStopCollector
+    events::Vector{SnoptStopEvent}
+    stop_after::Int
+end
+
+SnoptStopCollector() = SnoptStopCollector(SnoptStopEvent[], typemax(Int))
+
+function (collector::SnoptStopCollector)(event)
+    push!(collector.events, event)
+    return event.major_iter < collector.stop_after
+end
+
+# HS71: min x1 x4 (x1 + x2 + x3) + x3  s.t.  x1 x2 x3 x4 >= 25, sum(x.^2) == 40.
+hs71_obj(x) = x[1]*x[4]*(x[1]+x[2]+x[3]) + x[3]
+
+function hs71_grad!(g, x)
+    g[1] = x[4]*(2x[1]+x[2]+x[3])
+    g[2] = x[1]*x[4]
+    g[3] = x[1]*x[4] + 1
+    g[4] = x[1]*(x[1]+x[2]+x[3])
+    return nothing
+end
+
+function hs71_con!(c, x)
+    c[1] = x[1]*x[2]*x[3]*x[4]
+    c[2] = x[1]^2 + x[2]^2 + x[3]^2 + x[4]^2
+    return nothing
+end
+
+function hs71_jac!(jnz, x)
+    jnz[1] = x[2]*x[3]*x[4]; jnz[2] = 2x[1]
+    jnz[3] = x[1]*x[3]*x[4]; jnz[4] = 2x[2]
+    jnz[5] = x[1]*x[2]*x[4]; jnz[6] = 2x[3]
+    jnz[7] = x[1]*x[2]*x[3]; jnz[8] = 2x[4]
+    return nothing
+end
+
+hs71_sparsity() = sparse(Int32[1,2,1,2,1,2,1,2], Int32[1,1,2,2,3,3,4,4],
+                         ones(8), 2, 4)
+
+solve_hs71(; kwargs...) = snopt(
+    hs71_obj, hs71_grad!, [1.0, 5.0, 5.0, 1.0];
+    lb = ones(4), ub = 5 * ones(4),
+    eval_con = hs71_con!, eval_jac = hs71_jac!,
+    lcon = [25.0, 40.0], ucon = [1e20, 40.0],
+    J = hs71_sparsity(),
+    options = ["Major print level" => 0, "Minor print level" => 0],
+    kwargs...)
+
 @testset "Workspace initialization" begin
     ws = initialize("", "")
     @test ws isa SNOPT.SnoptWorkspace
@@ -1186,4 +1237,126 @@ end
     @test called[]
     @test status ∈ keys(SNOPT.SNOPT_STATUS)   # some valid inform code
     @test SNOPT.SNOPT_STATUS[status] === :User_Requested_Stop
+end
+
+
+@testset "snSTOP major iteration callback" begin
+    stops = SnoptStopCollector()
+    logs = SnoptLogCollector(SnoptMajorLog[])
+    result = solve_hs71(snlog = logs, snstop = stops)
+
+    @test result.status == 1
+    @test result.objective ≈ 17.0140 atol = 1e-3
+    @test !isempty(stops.events)
+    @test all(e -> e isa SnoptStopEvent, stops.events)
+
+    # SNOPT calls snSTOP once per major iteration, in order.
+    @test [e.major_iter for e in stops.events] == sort(unique(e.major_iter for e in stops.events))
+    @test stops.events[end].major_iter == result.major_itns
+
+    # The dimensions SNOPT hands to snSTOP must describe this problem. These
+    # assertions are what pins down the Fortran argument order: a shifted
+    # argument list shows up here as garbage rather than as 4 variables and
+    # 2 constraints.
+    last = stops.events[end]
+    @test last.n == 4
+    @test last.m == 2
+    @test last.nb == 6
+    @test last.nncon == 2
+    @test last.nnobj == 4
+    @test last.negcon == 8
+    @test last.minimize == 1
+    @test last.max_superbasics >= last.n_superbasics
+
+    # ...and so do the vectors, which must match values we can compute here.
+    @test length(last.x) == last.nb
+    @test last.x[1:4] ≈ result.x atol = 1e-8
+    @test last.bl == [1.0, 1.0, 1.0, 1.0, 25.0, 40.0]
+    @test last.bu[1:4] == fill(5.0, 4)
+    expected_fcon = zeros(2); hs71_con!(expected_fcon, last.x[1:4])
+    expected_gobj = zeros(4); hs71_grad!(expected_gobj, last.x[1:4])
+    expected_gcon = zeros(8); hs71_jac!(expected_gcon, last.x[1:4])
+    @test last.fcon ≈ expected_fcon
+    @test last.fx ≈ expected_fcon
+    @test last.gobj ≈ expected_gobj
+    @test last.gcon ≈ expected_gcon
+    @test length(last.ycon) == 2
+    @test length(last.pi) == 2
+    @test length(last.rc) == last.nb
+    @test length(last.rg) == last.max_superbasics
+    @test length(last.hs) == last.nb
+
+    # snLog and snSTOP see the same major iteration, so their shared fields
+    # must agree; this catches a drift in either argument list.
+    @test length(logs.logs) == length(stops.events)
+    for (log, stop) in zip(logs.logs, stops.events)
+        @test log.major_iter == stop.major_iter
+        @test log.minor_iter == stop.minor_iter
+        @test log.iteration == stop.iteration
+        @test log.n_superbasics == stop.n_superbasics
+        @test log.objective == stop.objective
+        @test log.primal_infeasibility == stop.primal_infeasibility
+        @test log.dual_infeasibility == stop.dual_infeasibility
+        @test log.step == stop.step
+        @test log.x == stop.x
+        @test log.hs == stop.hs
+    end
+    @test SNOPT.active_snopt_callback_count() == 0
+end
+
+@testset "snSTOP requests early termination" begin
+    stops = SnoptStopCollector(SnoptStopEvent[], 2)
+    result = solve_hs71(snstop = stops)
+
+    @test SNOPT.SNOPT_STATUS[result.status] === :User_Requested_Stop
+    @test stops.events[end].major_iter == 2
+    @test result.major_itns <= 3
+    @test SNOPT.active_snopt_callback_count() == 0
+end
+
+@testset "snSTOP propagates callback exceptions" begin
+    thrown = ErrorException("snSTOP callback failed")
+    @test_throws ErrorException solve_hs71(snstop = _ -> throw(thrown))
+    @test SNOPT.active_snopt_callback_count() == 0
+end
+
+@testset "snSTOP on SnoptA and SnoptC" begin
+    ws = make_ws()
+    set_option!(ws, "Derivative option", 1)
+    stops = SnoptStopCollector()
+    usrfun = make_usrfun_a(
+        (F, x) -> begin F[1] = (x[1] - 2)^2 + (x[2] - 3)^2 end;
+        eval_G = (G, x) -> begin G[1] = 2(x[1] - 2); G[2] = 2(x[2] - 3) end
+    )
+    prob = SnoptA(
+        ws, 1, 2, 0.0, 1,
+        Int32[], Int32[], Float64[],
+        Int32[1, 1], Int32[1, 2],
+        [-10.0, -10.0], [10.0, 10.0],
+        [-1.0e20], [1.0e20],
+        [0.0, 0.0], zeros(Int32, 2), zeros(2),
+        zeros(1), zeros(Int32, 1), zeros(1),
+        0, 0, 0, 0.0,
+        usrfun
+    )
+    @test snopta!(prob; snstop = stops) == 1
+    @test prob.x[1] ≈ 2.0 atol = 1.0e-4
+    @test !isempty(stops.events)
+    @test stops.events[end].n == 2
+    close(ws)
+
+    ws_c = make_ws()
+    stops_c = SnoptStopCollector()
+    J = hs71_sparsity()
+    usrfun_c = make_usrfun_c(hs71_obj, hs71_grad!, hs71_con!, hs71_jac!, J, ws_c.iw)
+    prob_c = make_constrained_prob_c(
+        ws_c, [1.0, 5.0, 5.0, 1.0], ones(4), 5 * ones(4),
+        [25.0, 40.0], [1e20, 40.0], usrfun_c, J
+    )
+    @test snoptc!(prob_c; snstop = stops_c) == 1
+    @test prob_c.obj_val ≈ 17.0140 atol = 1e-3
+    @test !isempty(stops_c.events)
+    @test stops_c.events[end].n == 4
+    @test stops_c.events[end].m == 2
+    @test SNOPT.active_snopt_callback_count() == 0
 end
