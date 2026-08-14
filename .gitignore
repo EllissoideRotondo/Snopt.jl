@@ -21,7 +21,3 @@ Manifest.toml
 .codex
 .vscode/
 
-
-# Private local folders — never publish
-/.docs/
-/.claude/
