@@ -1,137 +1,155 @@
 # SNOPT.jl
 
 [![CI](https://github.com/EllissoideRotondo/SNOPT.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/EllissoideRotondo/SNOPT.jl/actions/workflows/CI.yml)
-[![docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://EllissoideRotondo.github.io/SNOPT.jl/stable)
+[![docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://EllissoideRotondo.github.io/SNOPT.jl/stable/)
 
-[SNOPT.jl](https://github.com/EllissoideRotondo/SNOPT.jl) is an unofficial Julia wrapper for
-[SNOPT](https://ccom.ucsd.edu/~optimizers/solvers/snopt/), the sparse nonlinear
-optimizer for large-scale constrained problems. It exposes SNOPT's `snOptA`,
-`snOptB`, and `snOptC` interfaces through Julia callbacks, and provides `snopt`
-as the main Julia-facing entry point.
+SNOPT.jl is an unofficial Julia interface to
+[SNOPT](https://ccom.ucsd.edu/~optimizers/solvers/snopt/). SNOPT solves large,
+constrained nonlinear optimization problems.
 
-## License
+Use this package for direct access to SNOPT's `snOptA`, `snOptB`, and `snOptC`
+interfaces. Use
+[OptimizationSNOPT.jl](https://github.com/EllissoideRotondo/OptimizationSNOPT.jl)
+for Optimization.jl problems and automatic differentiation.
 
-`SNOPT.jl` is licensed under the [MIT License](LICENSE). The underlying solver is
-a closed-source commercial product for which you must
-[purchase a license](https://ccom.ucsd.edu/~optimizers/solvers/snopt/); its
-binaries are **not** distributed with this package. See
-[THIRD_PARTY_NOTICE.md](THIRD_PARTY_NOTICE.md).
+## Requirements
 
-## Installation
+- Julia 1.10 or later.
+- A licensed SNOPT 7 shared library.
+- SNOPT's `snopt-interface` C functions in that library.
 
-`SNOPT.jl` needs a SNOPT shared library (`libsnopt7.so` on Linux,
-`libsnopt7.dylib` on Intel macOS, `libsnopt7.dll` on Windows). Set the `SNOPTDIR`
-environment variable to the directory containing it, then add the package:
+SNOPT.jl does not include SNOPT or a SNOPT license.
+
+## Install
+
+Install the registered package when it is available in your registry:
 
 ```julia
 import Pkg
 Pkg.add("SNOPT")
-
-using SNOPT
-SNOPT.has_snopt()   # true once the library is found
 ```
 
-`SNOPTDIR` is the recommended setup on Linux and macOS. If it is unset, SNOPT.jl
-also searches the platform library-path variables, then the system loader's
-default paths:
+Install the current source version with:
+
+```julia
+import Pkg
+Pkg.develop(url = "https://github.com/EllissoideRotondo/SNOPT.jl")
+```
+
+Set `SNOPTDIR` to the directory that contains `libsnopt7`:
 
 ```bash
-export LD_LIBRARY_PATH=/path/to/snopt:$LD_LIBRARY_PATH
-export DYLD_LIBRARY_PATH=/path/to/snopt:$DYLD_LIBRARY_PATH   # macOS
+export SNOPTDIR=/path/to/snopt/lib
 ```
 
-If the library is not found, the package still loads; `has_snopt()` returns
-`false` and solves raise an informative error. Depending on how your SNOPT
-distribution is licensed, you may also need to point the `SNOPT_LICENSE`
-environment variable at your license file before solving — see the vendor's
-setup instructions.
+Windows PowerShell uses this command:
 
-The library must include the `snopt-interface` C shims (the `f_*` entry
-points); SNOPT.jl probes for every symbol it calls before accepting a library,
-so a build without them is rejected at load time with a fallback to the next
-search location.
+```powershell
+$env:SNOPTDIR = "C:\path\to\snopt\lib"
+```
 
-SNOPT keeps one global Fortran session per process, so SNOPT.jl serializes
-solves internally: concurrent calls from several threads are safe, but they run
-one at a time. Use multiple Julia processes for genuinely parallel solves.
+Verify the complete setup:
 
-## Usage
+```bash
+julia -e 'using SNOPT; @assert SNOPT.has_snopt(); println(SNOPT.libsnopt7)'
+```
 
-The main entry point is `snopt`, which solves a problem through SNOPT's `snOptB`
-interface. You supply an objective `f(x)`, its gradient `g!(g, x)`, and a starting
-point:
+See the [installation guide](https://EllissoideRotondo.github.io/SNOPT.jl/stable/installation/)
+for library names, search paths, licensing, and platform limits.
+
+## Quick start
+
+The high-level [`snopt`](https://EllissoideRotondo.github.io/SNOPT.jl/stable/interface/)
+function manages the workspace and returns a `SnoptResult`.
 
 ```julia
 using SNOPT
 
-f(x)     = (x[1] - 1)^2 + (x[2] - 2)^2                     # objective
-g!(g, x) = (g[1] = 2(x[1]-1); g[2] = 2(x[2]-2); nothing)   # gradient
-x0       = [0.0, 0.0]
+objective(x) = (x[1] - 1.0)^2 + (x[2] - 2.0)^2
 
-result = snopt(f, g!, x0;
-    lb = -10.0, ub = 10.0,
-    options = ["Major print level" => 0, :minor_print_level => 0],
+function gradient!(gradient, x)
+    gradient[1] = 2.0 * (x[1] - 1.0)
+    gradient[2] = 2.0 * (x[2] - 2.0)
+    return nothing
+end
+
+result = snopt(
+    objective,
+    gradient!,
+    [0.0, 0.0];
+    lb = -10.0,
+    ub = 10.0,
+    options = ["Major print level" => 0],
 )
 
-result.status          # SNOPT inform code
-result.status_symbol   # e.g. :Solve_Succeeded
-result.objective       # final objective value
-result.x               # solution vector
+result.status_symbol
+result.x
+result.objective
 ```
 
-Key points of the high-level interface:
+The gradient callback must fill every entry of `gradient`. It may return any
+value because SNOPT uses the mutated array.
 
-- **Constraints.** Pass `eval_con`, `eval_jac`, `lcon`, `ucon`, and an optional
-  sparse Jacobian sparsity pattern `J` (a `SparseMatrixCSC`). `eval_jac(jnz, x)`
-  fills the Jacobian nonzeros in `J`'s column-major order; if `J` is omitted, a
-  dense pattern is assumed. The solve workspace is sized automatically from SNOPT's
-  own `snMemB` estimator, exposed as `snmemb`.
-- **Options.** A vector of pairs whose keys are strings or symbols (symbol
-  underscores become spaces, so `:major_print_level => 0` equals
-  `"Major print level" => 0`). Options can also be read from a specs file with
-  `read_options`.
-- **Monitoring.** `snlog` receives a `SnoptMajorLog` per major iteration (counters,
-  objective, infeasibilities, the current point) and `snstop` receives a
-  `SnoptStopEvent` (the same, plus gradients, multipliers, and reduced costs) from
-  SNOPT's own termination hook; the lower-level `callback` keyword fires on each
-  objective/constraint evaluation. Returning `false` from any of them requests
-  early termination.
+## Run the examples
 
-```julia
-deadline = time() + 30
+Run these commands from the repository root:
 
-result = snopt(f, g!, x0;
-    options = ["Major print level" => 1],
-    snlog = event -> (println("major $(event.major_iter): f = $(event.objective)"); true),
-    snstop = event -> time() < deadline,
-)
+```bash
+julia --project=. examples/unconstrained.jl
+julia --project=. examples/hs71.jl
 ```
 
-Beyond `snopt`, the package exports the `snOptA`/`snOptB`/`snOptC` problem types
-(`SnoptA`, `SnoptB`/`SnoptProblem`, `SnoptC`), their in-place solvers (`snopta!`,
-`snoptb!`, `snoptc!`, `snopt!`), workspace management (`initialize`, `set_option!`,
-`snmemb`), and callback builders (`make_objfun`, `make_confun`, `make_usrfun_a`,
-`make_usrfun_c`, `make_snlog`, `make_snstop`). See the
-[documentation](https://EllissoideRotondo.github.io/SNOPT.jl/stable) and the
-[`examples/`](examples) directory (`hs71.jl`, `unconstrained.jl`) for full worked
-problems.
+The second example includes bounds, constraints, and a constraint Jacobian.
+A Jacobian is the matrix of constraint derivatives.
+
+## Main interfaces
+
+| Need | Interface |
+| --- | --- |
+| Managed workspace and split callbacks | `snopt` |
+| Separate objective and constraint callbacks | `SnoptB` |
+| One combined callback | `SnoptC` |
+| Stacked rows and separate derivative structure | `SnoptA` |
+
+The [documentation](https://EllissoideRotondo.github.io/SNOPT.jl/stable/)
+contains callback contracts, warm starts, monitoring, and low-level examples.
+
+## Concurrency
+
+SNOPT owns one global Fortran workspace per process. SNOPT.jl serializes
+workspace creation and solves. Threaded solves are safe, but run sequentially.
+
+Use separate Julia processes for parallel solves.
+
+## Test
+
+Run the test suite from the repository root:
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.test()'
+```
+
+Solver tests run when Julia finds `libsnopt7`. Library discovery tests remain
+available without it.
 
 ## Platform support
 
-**Linux** is tested with a compatible `libsnopt7`.
+- Linux is tested with a compatible `libsnopt7.so`.
+- Intel macOS is expected to work, but is not tested by the maintainers.
+- Apple Silicon is not currently supported.
+- Windows requires a MinGW-built `libsnopt7.dll`.
 
-**macOS on Intel** should work with a compatible x86_64 `libsnopt7.dylib`, but it
-has not been tested by the maintainers. Apple Silicon is not currently tested or
-supported.
+The vendor's Intel-built Windows library is not compatible with this package.
+Use the MinGW build or Windows Subsystem for Linux.
 
-**Windows** requires a `libsnopt7.dll` built from the SNOPT source with
-[MinGW](https://www.mingw-w64.org/) (the Intel-compiled distribution is not
-ABI-compatible). If recompiling is not an option,
-[WSL](https://learn.microsoft.com/en-us/windows/wsl/) is a working alternative.
+## License
+
+SNOPT.jl uses the MIT License. SNOPT is a separate commercial product.
+See [THIRD_PARTY_NOTICE.md](THIRD_PARTY_NOTICE.md).
 
 ## Acknowledgements
 
-This package draws on prior Julia SNOPT wrappers:
+This package draws on prior Julia wrappers:
 
 - [snopt/SNOPT7.jl](https://github.com/snopt/SNOPT7.jl)
 - [byuflowlab/Snopt.jl](https://github.com/byuflowlab/Snopt.jl)

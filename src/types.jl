@@ -1,18 +1,17 @@
 """
     SnoptWorkspace
 
-SNOPT's integer (`iw`) and real (`rw`) working storage plus the bookkeeping needed to
-initialize and finalize one SNOPT session. Created by [`initialize`](@ref), which calls
-SNOPT's `sninit`, and released by `close`/`free!`, which calls SNOPT's `snend`. SNOPT
-requires each work array to hold at least 500 elements; smaller requests are rejected.
-A workspace is normally managed for you by [`snopt`](@ref); use it directly only when
-driving the low-level [`SnoptA`](@ref)/[`SnoptB`](@ref)/[`SnoptC`](@ref) entry points.
+Store SNOPT's integer and real work arrays for one process-wide session.
 
-SNOPT solves are process-serial: run one solve at a time per Julia process, and
-use multiple Julia processes for parallel solves. Creating multiple
-`SnoptWorkspace` objects does not make independent solver sessions. Calling
-[`initialize`](@ref) again closes any previous active workspace before creating the
-new one.
+Create a workspace with [`initialize`](@ref). Close it with `close` or manage it
+with an `initialize do` block. Each work array must contain at least 500 values.
+
+SNOPT permits one active workspace per process. Calling `initialize` closes the
+previous active workspace. Creating several objects does not create parallel
+solver sessions.
+
+[`snopt`](@ref) manages this type automatically. Use it directly only with
+[`SnoptA`](@ref), [`SnoptB`](@ref), or [`SnoptC`](@ref).
 """
 mutable struct SnoptWorkspace
     status::Int
@@ -57,9 +56,10 @@ end
 """
     AbstractSnoptProblem
 
-Supertype for the low-level SNOPT problem objects [`SnoptA`](@ref), [`SnoptB`](@ref),
-and [`SnoptC`](@ref). Each wraps a [`SnoptWorkspace`](@ref SNOPT.SnoptWorkspace) together
-with the bound, point, and callback data for one of SNOPT's three Fortran entry points.
+Supertype for [`SnoptA`](@ref), [`SnoptB`](@ref), and [`SnoptC`](@ref).
+
+Each problem owns dimensions, bounds, points, callbacks, and a
+[`SnoptWorkspace`](@ref SNOPT.SnoptWorkspace).
 """
 abstract type AbstractSnoptProblem end
 
@@ -233,9 +233,11 @@ SnoptC(ws, n, nc, m_eff, nnobj, x, bl, bu, hs, J, obj_val, status, lambda,
 """
     SnoptMemory
 
-Result of SNOPT's workspace-memory estimator (see [`snmemb`](@ref)). `info` is the
-SNOPT inform code from the estimate (100 or 104 on success), and `miniw`/`minrw` are
-the minimum integer- and real-workspace lengths SNOPT needs to solve the problem.
+Result from [`snmemb`](@ref), SNOPT's workspace estimator.
+
+- `info` is the SNOPT result code. Codes 100 and 104 indicate success.
+- `miniw` is the minimum integer-workspace length.
+- `minrw` is the minimum real-workspace length.
 """
 struct SnoptMemory
     info::Int
@@ -246,13 +248,16 @@ end
 """
     SnoptBasis
 
-The basis SNOPT ended a solve with: the basis-status array `hs` for the extended
-problem, the number of superbasic variables `nS`, and the dimensions they belong
-to — `n` design variables and `m` **effective** SNOPT rows. `m` is the row count
-of the extended problem, not the user's constraint count: an unconstrained
-high-level solve has `m == 1` because the wrapper adds a dummy row, so
-`length(hs) == n + m` always. Pass one back to [`snopt`](@ref) as
-`start = "Warm", basis = result.basis` to warm-start a closely related solve.
+Basis data saved after a solve.
+
+- `hs` stores one basis state for each extended variable.
+- `nS` is the number of superbasic variables. They define SNOPT's reduced
+  search subspace.
+- `n` is the number of design variables.
+- `m` is SNOPT's effective row count.
+
+The invariant is `length(hs) == n + m`. An unconstrained high-level solve still
+has one dummy row. Pass this object to [`snopt`](@ref) for a warm start.
 """
 struct SnoptBasis
     hs::Vector{Int32}
@@ -264,23 +269,23 @@ end
 """
     SnoptResult
 
-Outcome of a high-level [`snopt`](@ref) solve. Fields:
+Result from the high-level [`snopt`](@ref) function.
 
-  * `status`: SNOPT inform code (see [`SNOPT_STATUS`](@ref)).
-  * `status_symbol`: symbolic interpretation of `status`, e.g. `:Solve_Succeeded`.
-  * `objective`: final objective value.
-  * `x`: final values of the `n` design variables.
-  * `lambda`: Lagrange multipliers for the variables followed by the nonlinear
-    constraints, in the same order as `[x; c(x)]` in SNOPT's extended problem.
-    Active lower-bound multipliers are positive in SNOPT's convention.
-  * `num_inf`, `sum_inf`: number and sum of constraint infeasibilities.
-  * `iterations`, `major_itns`: total minor and major iteration counts.
-  * `run_time`: SNOPT-reported solve time in seconds.
-  * `memory`: the [`SnoptMemory`](@ref) estimate used to size the workspace.
-  * `basis`: the final [`SnoptBasis`](@ref), for warm-starting a later solve.
-    Only meaningful when SNOPT actually ran: if the evaluation `callback`
-    requested a stop during the preflight evaluation (before SNOPT started),
-    `basis` is all zeros and warm-starting from it is just a cold start.
+- `status`: SNOPT integer result code. See [`SNOPT_STATUS`](@ref).
+- `status_symbol`: Symbolic interpretation of `status`.
+- `objective`: Final objective value.
+- `x`: Final design variables.
+- `lambda`: Variable multipliers followed by constraint multipliers.
+- `num_inf`: Number of remaining infeasibilities.
+- `sum_inf`: Sum of remaining infeasibilities.
+- `iterations`: Total minor iterations.
+- `major_itns`: Total major iterations.
+- `run_time`: SNOPT-reported solve time in seconds.
+- `memory`: [`SnoptMemory`](@ref) used to size the workspace.
+- `basis`: [`SnoptBasis`](@ref) for a later warm start.
+
+The basis is meaningful only after SNOPT starts. An evaluation callback can
+stop before SNOPT creates valid basis data.
 """
 struct SnoptResult
     status::Int
@@ -300,29 +305,21 @@ end
 """
     SnoptMajorLog
 
-Snapshot of SNOPT's state at one major-iteration log event, delivered to the
-`snlog` callback of [`snopt`](@ref) (and built internally by [`make_snlog`](@ref)).
-It mirrors the quantities SNOPT prints on its major-iteration log line —
-iteration counters, objective and merit-function values, primal/dual
-infeasibilities, step length, penalty and Hessian-condition estimates — and also
-exposes the current point `x`, constraint values `fcon`, and multipliers `ycon`.
+State captured for one major-iteration `snlog` event.
 
-Important fields:
+- `iteration`, `major_iter`, and `minor_iter` are SNOPT counters.
+- `objective` includes any objective offset and linear row.
+- `merit` combines the objective with a feasibility penalty.
+- `f_objective` and `f_merit` contain the nonlinear components.
+- `primal_infeasibility` and `dual_infeasibility` measure convergence.
+- `max_violation` and `relative_violation` measure feasibility violations.
+- `step`, `penalty_norm`, and `condition_hessian` describe the algorithm state.
+- `x` contains design variables followed by slacks.
+- `fcon`, `fx`, and `ycon` contain row values and multipliers.
+- `hs` contains basis states for the extended variables.
 
-  * `iteration`, `major_iter`, `minor_iter`: SNOPT iteration counters.
-  * `objective`, `merit`: objective and merit-function values including any
-    objective offset and linear objective row.
-  * `f_objective`, `f_merit`: nonlinear objective and merit-function components
-    reported by SNOPT before adding the offset/linear objective row.
-  * `primal_infeasibility`, `dual_infeasibility`, `max_violation`,
-    `relative_violation`: feasibility and optimality diagnostics from SNOPT's log.
-  * `step`, `penalty_norm`, `condition_hessian`: step and algorithm diagnostics.
-  * `x`: the current extended SNOPT point, including design variables and slacks.
-  * `fcon`, `fx`, `ycon`: nonlinear constraint values, row values, and multipliers.
-  * `hs`: SNOPT basis-state array for the extended variables.
-
-Return `false` from the callback to request early termination; any other return
-value lets SNOPT continue.
+[`snopt`](@ref) delivers this object to `snlog`. Return `false` to request a
+stop. Return any other value to continue.
 """
 struct SnoptMajorLog
     iteration::Int
@@ -359,26 +356,21 @@ end
 """
     SnoptStopEvent
 
-Snapshot of SNOPT's state at the end of a major iteration, delivered to the
-`snstop` callback of [`snopt`](@ref) (and built internally by
-[`make_snstop`](@ref)). SNOPT calls its `snSTOP` hook once per major iteration
-specifically so the caller can inspect the current iterate and decide whether to
-keep going, which makes it the place to implement custom termination criteria
-(wall-clock budgets, target objective values, external cancellation).
+State captured for one major-iteration `snstop` event.
 
-`SnoptStopEvent` carries everything [`SnoptMajorLog`](@ref) carries plus the
-quantities SNOPT only exposes through `snSTOP`:
+This object contains every [`SnoptMajorLog`](@ref) field. It also contains:
 
-  * `m`, `max_superbasics`, `negcon`: problem dimensions of the extended problem.
-  * `gobj`, `gcon`: current objective gradient and constraint Jacobian values.
-  * `fx`: the row values of the nonlinear constraints, alongside `fcon`.
-  * `pi`, `rc`, `rg`: multipliers for the rows, reduced costs for all extended
-    variables, and the reduced gradient of the superbasics.
-  * `bl`, `bu`: the bounds SNOPT is currently working with (after scaling).
+- `m`, `max_superbasics`, and `negcon`: Extended problem dimensions.
+- `gobj`: Current objective gradient.
+- `gcon`: Stored constraint Jacobian values.
+- `fx`: Nonlinear constraint row values.
+- `pi`: Row multipliers.
+- `rc`: Reduced costs for extended variables.
+- `rg`: Reduced gradient for superbasic variables.
+- `bl` and `bu`: Scaled bounds used by SNOPT.
 
-Return `false` from the callback to make SNOPT stop; the solve then finishes with
-inform code 74 (`:User_Requested_Stop`). Any other return value lets SNOPT
-continue.
+[`snopt`](@ref) delivers this object to `snstop`. Return `false` to request a
+stop. The solve then returns `:User_Requested_Stop`.
 """
 struct SnoptStopEvent
     iteration::Int

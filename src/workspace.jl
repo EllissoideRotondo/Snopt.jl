@@ -195,24 +195,29 @@ const SNOPT_STATUS = Dict(
 
 """
     initialize(printfile, summfile)
+    initialize(printfile, summfile, leniw, lenrw)
     initialize(f, printfile, summfile[, leniw, lenrw])
 
-Allocate a workspace using a conservative default size suitable for small to
-medium problems (up to ~100 variables and constraints). For larger problems,
-use the explicit-size overload and compute workspace lengths with:
-    leniw = 500 + 100*(n + nc)
-    lenrw = 500 + 200*(n + nc)
-where `n` is the number of design variables and `nc` the number of nonlinear
-constraints. Problems with very dense Jacobians may need a larger `lenrw`.
+Create and initialize the process-wide SNOPT workspace.
 
-The function form supports Julia's do-block cleanup pattern:
+`printfile` and `summfile` select SNOPT output paths. Empty strings suppress
+visible output. `leniw` and `lenrw` set the integer and real work-array lengths.
+Both lengths must be at least 500.
 
-    initialize("", "") do ws
-        # build and solve a low-level SnoptA/SnoptB/SnoptC problem
-    end
+The default overload uses `leniw = 30500` and `lenrw = 60000`. Use
+[`snmemb`](@ref) to size larger or denser problems.
 
-The workspace is closed with `close(ws)` when the block exits, including if the
-block throws.
+The function form closes the workspace when the block exits:
+
+```julia
+initialize("", "") do workspace
+    set_option!(workspace, "Major print level", 0)
+    # Build and solve a low-level problem.
+end
+```
+
+Calling `initialize` closes any previous active workspace. Workspace creation
+and solves are serialized within each Julia process.
 
 """
 function initialize(printfile::String, summfile::String)

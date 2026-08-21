@@ -1204,6 +1204,9 @@ end
     @test set_option!(ws, "Major optimality tolerance", Float32(1e-5)) == 0
     @test set_option!(ws, "Major optimality tolerance", 1 // 100000) == 0
     @test_throws ArgumentError set_option!(ws, "Major optimality tolerance", NaN32)
+    # Given a Boolean where SNOPT requires a numeric option value,
+    # when the option is set directly, then the wrapper must reject it.
+    @test_throws ArgumentError set_option!(ws, "Major iterations limit", true)
     close(ws)
 end
 

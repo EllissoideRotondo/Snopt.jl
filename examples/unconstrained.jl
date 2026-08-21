@@ -1,5 +1,7 @@
-# Unconstrained quadratic  min (x - 1)^2 + (y - 2)^2
-# Analytical solution: x* = (1, 2), f* = 0
+# Minimize (x - 1)^2 + (y - 2)^2.
+#
+# Run from the SNOPT.jl repository root:
+#   julia --project=. examples/unconstrained.jl
 using SNOPT
 
 function objective(x)
@@ -13,7 +15,7 @@ function gradient!(g, x)
 end
 
 function progress(event::SnoptMajorLog)
-    println("  major $(event.major_iter)  minor $(event.minor_iter)  f = $(event.objective)")
+    println("major $(event.major_iter): objective = $(event.objective)")
     return true
 end
 
@@ -31,7 +33,7 @@ result = snopt(
     printfile = joinpath(@__DIR__, "unconstrained.out"),
 )
 
-println("\n=== Unconstrained Quadratic Result ===")
-println("Status : ", result.status, " (", result.status_symbol, ")")
-println("Obj    : ", result.objective)
-println("x*     : ", result.x)
+println()
+println("status = ", result.status, " (", result.status_symbol, ")")
+println("objective = ", result.objective)
+println("x = ", result.x)

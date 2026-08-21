@@ -61,13 +61,15 @@ end
     set_option!(prob, "Keyword string", value::Real)
 
 Set a single SNOPT option on `prob` (a [`SnoptWorkspace`](@ref) or any
-[`AbstractSnoptProblem`](@ref)) by calling SNOPT's `snSet`/`snSeti`/`snSetr`, and
-return the number of parse errors SNOPT reported (always `0`, since a nonzero count
-throws). The one-string form sets keyword options such as
-`"Hessian limited memory"`; the two-argument forms set an integer or real value for a
-keyword such as `"Major iterations limit"`. For the high-level [`snopt`](@ref) entry
-point, pass options as a vector of pairs instead; see also [`read_options`](@ref) for
-loading a specs file.
+[`AbstractSnoptProblem`](@ref)). The function calls SNOPT's native option
+routine and returns `0` on success. SNOPT parse errors raise `ArgumentError`.
+
+The one-string form sets a complete option such as `"Hessian limited memory"`.
+The other forms accept integer or finite real values. Boolean values are
+rejected because Julia treats them as integers.
+
+For [`snopt`](@ref), pass options as a vector of pairs. Use
+[`read_options`](@ref) to read a specs file.
 """
 set_option!(prob::Union{SnoptA, SnoptB, SnoptC}, args...) = set_option!(prob.ws, args...)
 
@@ -104,6 +106,8 @@ end
 
 # The docstring promises Integer/Real; funnel every width into the two ccall
 # methods so Int32, Float32, Rational, and friends work as advertised.
+set_option!(prob::SnoptWorkspace, keyword::String, value::Bool) =
+    throw(ArgumentError("SNOPT option $(repr(keyword)) does not accept Bool values"))
 set_option!(prob::SnoptWorkspace, keyword::String, value::Integer) =
     set_option!(prob, keyword, Int(value))
 set_option!(prob::SnoptWorkspace, keyword::String, value::Real) =

@@ -4,159 +4,173 @@ CurrentModule = SNOPT
 
 # Low-level interface
 
-Below [`snopt`](@ref) sits a thin layer that mirrors SNOPT's three Fortran entry
-points. Use it when you need a problem shape the high-level function does not cover
-(for example a linear objective row, warm/hot starts reusing a workspace, or
-SNOPT's combined `snOptC` user function), or when you want fine control over the
-workspace and options.
+Use the low-level interface only when [`snopt`](@ref) cannot represent the
+problem. Examples include linear objective rows and hot starts.
+
+The low-level types mirror SNOPT's three Fortran entry points.
 
 ## Workspace lifecycle
 
-Every solve runs against a [`SnoptWorkspace`](@ref SNOPT.SnoptWorkspace) created by
-[`initialize`](@ref). The workspace owns SNOPT's integer/real work arrays and the
-solver session; it must be closed to release the Fortran-side state.
+[`initialize`](@ref) creates a [`SnoptWorkspace`](@ref SNOPT.SnoptWorkspace).
+The workspace owns SNOPT's work arrays and active Fortran session.
+
+Always close a manually managed workspace:
 
 ```julia
-ws = initialize("", "")          # default size (small/medium problems)
+workspace = initialize("", "")
 try
-    set_option!(ws, "Major print level", 0)
-    # ... build and solve a SnoptA/SnoptB/SnoptC problem against ws ...
+    set_option!(workspace, "Major print level", 0)
+    # Build and solve a low-level problem here.
 finally
-    close(ws)                    # calls SNOPT's snend; also runs as a finalizer
+    close(workspace)
 end
 ```
 
-A `do`-block form handles the cleanup for you, including on error:
+Prefer the `do` form because it closes the workspace after errors:
 
 ```julia
-initialize("", "") do ws
-    set_option!(ws, "Major print level", 0)
-    # ... use ws ...
+initialize("", "") do workspace
+    set_option!(workspace, "Major print level", 0)
+    # Build and solve a low-level problem here.
 end
 ```
 
-!!! warning "One active solve per process"
-    SNOPT keeps one global Fortran session per process, so creating multiple
-    [`SnoptWorkspace`](@ref) objects does not make independent solver sessions.
-    When [`initialize`](@ref) is called again, SNOPT.jl closes the previous
-    active workspace before creating the new one.
+SNOPT owns one active workspace per process. Calling `initialize` closes the
+previous active workspace. All workspace operations and solves are serialized.
 
-    Workspace creation and solves are serialized internally, so concurrent calls
-    from several threads are safe; they run one at a time rather than in
-    parallel. Use multiple Julia processes for genuinely parallel solves, and
-    prefer the high-level [`snopt`](@ref) entry point or an `initialize do`
-    block unless you specifically need to manage a workspace yourself.
+Do not create several workspaces for parallel solves. Use separate Julia
+processes instead.
 
-For larger problems, size the work arrays explicitly. A reasonable rule of thumb is
+## Workspace size
 
-```julia
-n  = 500    # design variables
-nc = 200    # nonlinear constraints
-leniw = 500 + 100 * (n + nc)
-lenrw = 500 + 200 * (n + nc)
-ws = initialize("", "", leniw, lenrw)
-```
+Each work array must contain at least 500 elements. `initialize` enforces this
+SNOPT requirement.
 
-Each array must hold at least 500 elements (SNOPT's `sninit` minimum), which
-`initialize` enforces.
-
-## Setting options
-
-[`set_option!`](@ref) wraps SNOPT's `snSet`/`snSeti`/`snSetr`:
+For a known problem, use [`snmemb`](@ref) to ask SNOPT for minimum sizes:
 
 ```julia
-set_option!(ws, "Major iterations limit", 250)   # integer value
-set_option!(ws, "Major optimality tolerance", 1e-8)  # real value
-set_option!(ws, "Hessian limited memory")        # keyword-only string
+memory = snmemb(m, n, neJ, negCon, nnCon, nnObj, nnJac)
+workspace = initialize("", "", memory.miniw, memory.minrw)
 ```
 
-Alternatively, read an entire SNOPT specs file with [`read_options`](@ref); the
-returned inform code is explained by [`specs_status_message`](@ref).
+| Name | Meaning |
+| --- | --- |
+| `m` | Total rows passed to SNOPT. |
+| `n` | Design variables. |
+| `neJ` | Stored Jacobian entries. |
+| `negCon` | Nonlinear constraint derivatives. |
+| `nnCon` | Nonlinear constraints. |
+| `nnObj` | Variables in the nonlinear objective. |
+| `nnJac` | Variables in the nonlinear constraint Jacobian. |
 
-## Estimating workspace memory
+The high-level [`snopt`](@ref) function performs this estimate automatically.
 
-The high-level path calls SNOPT's `snMemB` estimator automatically. To do it
-yourself, call [`snmemb`](@ref) with the problem dimensions; it returns a
-[`SnoptMemory`](@ref) carrying the minimum integer/real work-array lengths:
+## Set options
+
+[`set_option!`](@ref) calls SNOPT's native option functions.
 
 ```julia
-mem = snmemb(m, n, neJ, negCon, nnCon, nnObj, nnJac)
-mem.miniw, mem.minrw
+set_option!(workspace, "Major iterations limit", 250)
+set_option!(workspace, "Major optimality tolerance", 1.0e-8)
+set_option!(workspace, "Hessian limited memory")
 ```
 
-The dimensions are: `m` total constraints, `n` variables, `neJ` Jacobian nonzeros,
-`negCon` nonlinear Jacobian nonzeros, `nnCon` nonlinear constraints, `nnObj`
-nonlinear objective variables, and `nnJac` nonlinear Jacobian variables.
+The function requires an open workspace. Invalid options raise an
+`ArgumentError`. Use [`read_options`](@ref) to read a specs file.
 
 ## Problem types
 
-| Type | SNOPT entry | User function |
-|------|-------------|---------------|
-| [`SnoptB`](@ref) (= [`SnoptProblem`](@ref)) | `snOptB` | split objective + constraint callbacks |
-| [`SnoptC`](@ref) | `snOptC` | one combined callback for objective + constraints |
-| [`SnoptA`](@ref) | `snOptA` | one function returning a stacked `F` vector, separate linear/nonlinear derivative pattern |
+| Type | SNOPT entry | Callback shape |
+| --- | --- | --- |
+| [`SnoptB`](@ref) | `snOptB` | Separate objective and constraints. |
+| [`SnoptC`](@ref) | `snOptC` | Combined objective and constraints. |
+| [`SnoptA`](@ref) | `snOptA` | Stacked row vector and derivative structure. |
 
-All three are subtypes of [`AbstractSnoptProblem`](@ref) and are solved in place by
-[`snopt!`](@ref), which dispatches to [`snopta!`](@ref), [`snoptb!`](@ref), or
-[`snoptc!`](@ref). After a solve the problem's `status`, multipliers, and final
-point are populated. [`SnoptB`](@ref) and [`SnoptC`](@ref) also carry the final
-objective in their `obj_val` field; [`SnoptA`](@ref) has no such field — its
-objective is the row value `F[objrow] + objadd` (the workspace's `obj_val`
-mirrors it after the solve).
+All three types extend [`AbstractSnoptProblem`](@ref). [`snopt!`](@ref)
+dispatches to the matching in-place solver.
 
-## Building callbacks
+After solving, the problem contains its status, multipliers, and final point.
+`SnoptB` and `SnoptC` also store `obj_val`.
 
-The package provides builders that adapt ordinary Julia functions to the C
-signatures SNOPT expects:
+## Callback builders
 
-| Builder | For | Wraps |
-|---------|-----|-------|
-| [`make_objfun`](@ref) | `snOptB` | `eval_obj(x)`, `eval_grad(g, x)` |
-| [`make_confun`](@ref) | `snOptB` | `eval_con(c, x)`, `eval_jac(jnz, x)` |
-| [`make_dummy_confun`](@ref) | `snOptB` | no-op constraints for unconstrained problems |
-| [`make_usrfun_c`](@ref) | `snOptC` | combined objective + constraint evaluation |
-| [`make_usrfun_a`](@ref) | `snOptA` | `eval_F(F, x)` and optional `eval_G(G, x)` |
-| [`make_snlog`](@ref) | all three | a `snLog` hook delivering [`SnoptMajorLog`](@ref) events |
-| [`make_snstop`](@ref) | all three | a `snSTOP` hook delivering [`SnoptStopEvent`](@ref) events |
+The builders adapt Julia functions to SNOPT's C callback signatures.
 
-The problem-evaluating builders ([`make_objfun`](@ref), [`make_confun`](@ref),
-[`make_usrfun_a`](@ref), [`make_usrfun_c`](@ref)) take a `callback` keyword for
-per-evaluation monitoring. Leave it at its default `nothing` to skip monitoring
-entirely, which also avoids building an event object on every evaluation.
-[`make_snlog`](@ref) and [`make_snstop`](@ref) take their callback as a
-positional argument instead, and [`make_dummy_confun`](@ref) takes none. The
-solvers build these two for you when you pass `snlog`/`snstop`; call the builders
-directly only when driving SNOPT's kernels yourself.
+| Builder | Julia contract |
+| --- | --- |
+| [`make_objfun`](@ref) | `eval_obj(x)` and `eval_grad(gradient, x)` |
+| [`make_confun`](@ref) | `eval_con(values, x)` and `eval_jac(nonzeros, x)` |
+| [`make_dummy_confun`](@ref) | No constraints. |
+| [`make_usrfun_c`](@ref) | Combined objective and constraints. |
+| [`make_usrfun_a`](@ref) | `eval_F(F, x)` and optional `eval_G(G, x)`. |
+| [`make_snlog`](@ref) | Major-iteration progress events. |
+| [`make_snstop`](@ref) | Major-iteration stop events. |
 
-A minimal `snOptB` solve assembled by hand:
+Mutation callbacks must fill every requested entry. Array lengths and storage
+order must match the problem definition.
+
+Problem-evaluation builders accept an optional `callback` keyword. It receives
+an event after each evaluation. Return `false` to request a stop.
+
+## Minimal `SnoptB` construction
+
+This example shows the required extended arrays. SNOPT appends one slack
+variable per row. A slack converts a constraint row into a bounded variable.
 
 ```julia
 using SNOPT
 using SparseArrays
 
-initialize("", "") do ws
-    set_option!(ws, "Major print level", 0)
+initialize("", "") do workspace
+    set_option!(workspace, "Major print level", 0)
 
-    n, m_eff = 2, 1
-    objfun = make_objfun((x) -> (x[1]-1)^2 + (x[2]-2)^2,
-                         (g, x) -> (g[1] = 2(x[1]-1); g[2] = 2(x[2]-2); nothing),
-                         ws.iw)
+    n = 2
+    rows = 1
+
+    objective = x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2
+    gradient! = (gradient, x) -> begin
+        gradient[1] = 2.0 * (x[1] - 1.0)
+        gradient[2] = 2.0 * (x[2] - 2.0)
+        return nothing
+    end
+
+    objfun = make_objfun(objective, gradient!, workspace.iw)
     confun = make_dummy_confun()
 
-    x  = [0.0, 0.0, 0.0]                 # n design vars + m_eff slack
-    bl = [-10.0, -10.0, -1e20]
-    bu = [ 10.0,  10.0,  1e20]
-    hs = zeros(Int32, n + m_eff)
-    J  = SparseMatrixCSC{Float64,Int32}(1, n, Int32.(vcat(1, fill(2, n))),
-                                        Int32[1], Float64[0.0])
+    x = [0.0, 0.0, 0.0]
+    lower = [-10.0, -10.0, -1.0e20]
+    upper = [10.0, 10.0, 1.0e20]
+    states = zeros(Int32, n + rows)
+    J = SparseMatrixCSC{Float64, Int32}(
+        1,
+        n,
+        Int32[1, 2, 2],
+        Int32[1],
+        [0.0],
+    )
 
-    prob = SnoptB(ws, n, 0, m_eff, n, x, bl, bu, hs, J, 0.0, 0, Float64[],
-                  objfun, confun)
-    snoptb!(prob)
-    prob.status, prob.obj_val, prob.x[1:n]
+    problem = SnoptB(
+        workspace,
+        n,
+        0,
+        rows,
+        n,
+        x,
+        lower,
+        upper,
+        states,
+        J,
+        0.0,
+        0,
+        Float64[],
+        objfun,
+        confun,
+    )
+
+    snoptb!(problem)
+    problem.status, problem.obj_val, problem.x[1:n]
 end
 ```
 
-In practice, prefer [`snopt`](@ref) unless you specifically need this level of
-control — it performs exactly this assembly, with validation and automatic
-workspace sizing.
+Prefer [`snopt`](@ref) when it supports the problem. It provides validation,
+automatic sizing, and simpler result handling.

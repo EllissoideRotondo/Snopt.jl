@@ -1,11 +1,15 @@
-# Hock-Schittkowski Problem 71
+# Hock-Schittkowski problem 71 is a constrained nonlinear benchmark.
 #
-#   min  x1*x4*(x1+x2+x3) + x3
-#   s.t. x1*x2*x3*x4 >= 25
-#        x1^2+x2^2+x3^2+x4^2 = 40
-#        1 <= xi <= 5,  i = 1..4
+# Minimize:
+#   x1*x4*(x1 + x2 + x3) + x3
 #
-#   Known solution: x* = (1, 4.7430, 3.8211, 1.3791), f* ≈ 17.0140
+# Subject to:
+#   x1*x2*x3*x4 >= 25
+#   x1^2 + x2^2 + x3^2 + x4^2 = 40
+#   1 <= xi <= 5
+#
+# Run from the SNOPT.jl repository root:
+#   julia --project=. examples/hs71.jl
 
 using SNOPT
 using SparseArrays
@@ -66,7 +70,7 @@ result = snopt(
     printfile = joinpath(@__DIR__, "hs71.out"),
 )
 
-println("\n=== HS71 Result ===")
-println("Status : ", result.status, " (", result.status_symbol, ")")
-println("Obj    : ", result.objective)
-println("x*     : ", result.x)
+println()
+println("status = ", result.status, " (", result.status_symbol, ")")
+println("objective = ", result.objective)
+println("x = ", result.x)

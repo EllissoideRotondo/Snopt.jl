@@ -4,97 +4,111 @@ CurrentModule = SNOPT
 
 # Installation
 
+## Requirements
+
+Install Julia 1.10 or later. Obtain a licensed SNOPT 7 shared library.
+The library must include SNOPT's `snopt-interface` C functions.
+
+SNOPT.jl targets SNOPT 7.7. Other major versions may use different workspace
+layouts. A mismatched version can report incorrect iteration or timing data.
+
 ## Add the package
+
+Use your Julia package registry when it contains SNOPT:
 
 ```julia
 import Pkg
 Pkg.add("SNOPT")
 ```
 
-The package installs and loads without the SNOPT library present — it only
-depends on the `Libdl` and `SparseArrays` standard libraries. Without a usable
-`libsnopt7`, [`SNOPT.has_snopt`](@ref) returns `false` and any attempt to solve
-raises an informative error.
+Install the current source version with:
 
-## Provide the SNOPT library
+```julia
+import Pkg
+Pkg.develop(url = "https://github.com/EllissoideRotondo/SNOPT.jl")
+```
 
-You must supply a SNOPT shared library built for your platform:
+The package loads without the SNOPT library. [`SNOPT.has_snopt`](@ref) then
+returns `false`, and solve attempts report a setup error.
 
-| Platform | Library file     |
-|----------|------------------|
-| Linux    | `libsnopt7.so`   |
-| macOS Intel | `libsnopt7.dylib`|
-| Windows  | `libsnopt7.dll`  |
+## Provide the shared library
 
-SNOPT.jl targets **SNOPT 7.7**. It reads iteration counters and the reported run
-time from fixed offsets in SNOPT's work arrays, which are internal to that
-release series, so a different major version may load and then report wrong
-counters.
+| Platform | Filename |
+| --- | --- |
+| Linux | `libsnopt7.so` |
+| Intel macOS | `libsnopt7.dylib` |
+| Windows | `libsnopt7.dll` |
 
-The library must also export the
-[snopt-interface](https://github.com/snopt/snopt-interface) `f_*` C entry
-points (`f_sninitx`, `f_snoptb`, `f_snkera`, ...). Vendor-supplied binaries
-usually include them; a library built from the bare Fortran sources does not,
-and needs the snopt-interface shims compiled in. SNOPT.jl probes for every
-`f_*` symbol it calls before accepting a library, so a build without them is
-rejected at load time (with a warning and a fallback to the next search
-location) rather than failing at the first solve.
+Set `SNOPTDIR` to the directory containing that file.
 
-!!! note "License file"
-    Depending on how your SNOPT distribution is licensed, the library may
-    require the `SNOPT_LICENSE` environment variable to point at your license
-    file. A mislicensed library can load fine and still refuse to solve —
-    consult the setup instructions that came with your SNOPT distribution.
-
-The most reliable way to point the package at it is the `SNOPTDIR` environment
-variable, set to the **directory** that contains the library:
+Linux and macOS:
 
 ```bash
 export SNOPTDIR=/path/to/snopt/lib
 ```
 
-`SNOPTDIR` is the recommended setup on Linux and macOS. If it is unset (or set
-but no loadable library is found there, which emits a warning), SNOPT.jl also
-searches the platform library-path variables:
+Windows PowerShell:
+
+```powershell
+$env:SNOPTDIR = "C:\path\to\snopt\lib"
+```
+
+Set the variable before `using SNOPT`. Restart Julia after changing it.
+
+Some licenses also require `SNOPT_LICENSE`. Follow the instructions supplied
+with your SNOPT distribution.
+
+## Required C interface
+
+The library must export the `f_*` functions from
+[snopt-interface](https://github.com/snopt/snopt-interface). Examples include
+`f_sninitx`, `f_snoptb`, and `f_snkera`.
+
+Vendor libraries usually contain these functions. A library built only from
+the Fortran source usually does not. SNOPT.jl checks every required function
+before accepting a library.
+
+## Fallback search paths
+
+When `SNOPTDIR` is unset, SNOPT.jl checks standard platform search paths.
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/snopt/lib:$LD_LIBRARY_PATH
-export DYLD_LIBRARY_PATH=/path/to/snopt/lib:$DYLD_LIBRARY_PATH   # macOS
+export DYLD_LIBRARY_PATH=/path/to/snopt/lib:$DYLD_LIBRARY_PATH
 ```
 
-On Windows, the library is searched on the `PATH`. As a last resort the system
-loader's default search paths are tried too, so a `libsnopt7` installed in a
-standard location such as `/usr/lib` is found without any environment variable.
+Windows uses `PATH`. The system loader also checks its default locations.
 
-!!! tip "OpenMP companion library"
-    If an OpenMP runtime named `libiomp5` sits next to `libsnopt7` in the same
-    directory, it is preloaded automatically. A missing or incompatible companion
-    never aborts loading — only `libsnopt7` itself is required.
-
-The environment must be set **before** `using SNOPT`; the library path is
-resolved once, in the module's `__init__`. If you change `SNOPTDIR` afterwards,
-restart Julia.
+If `libiomp5` is beside `libsnopt7`, SNOPT.jl tries to preload it.
+`libiomp5` is an OpenMP runtime library. Failure to preload it does not stop
+library discovery.
 
 ## Verify the setup
+
+Run:
+
+```bash
+julia -e 'using SNOPT; @assert SNOPT.has_snopt(); println(SNOPT.libsnopt7)'
+```
+
+For more detail, inspect:
 
 ```julia
 using SNOPT
 
-SNOPT.has_snopt()        # true if the library was found and loaded
-SNOPT.libsnopt7          # the resolved absolute path (empty string if not found)
-SNOPT.find_snopt_lib()   # re-run the search to diagnose path problems
+SNOPT.has_snopt()
+SNOPT.libsnopt7
+SNOPT.find_snopt_lib()
 ```
+
+`find_snopt_lib()` repeats the search. It helps diagnose path or symbol errors.
 
 ## Platform notes
 
-**Linux** is tested with a compatible `libsnopt7`.
+- Linux is tested with a compatible `libsnopt7.so`.
+- Intel macOS is expected to work, but is not tested by the maintainers.
+- Apple Silicon is not currently supported.
+- Windows requires a MinGW-built `libsnopt7.dll`.
 
-**macOS on Intel** should work with a compatible x86_64 `libsnopt7.dylib`, but it
-has not been tested by the maintainers. Apple Silicon is not currently tested or
-supported.
-
-**Windows** requires a `libsnopt7.dll` compiled from the SNOPT Fortran source
-with [MinGW](https://www.mingw-w64.org/); the Intel-compiled distribution is not
-ABI-compatible with the `ccall` signatures this package uses. If recompiling is
-not practical, running under [WSL](https://learn.microsoft.com/en-us/windows/wsl/)
-with the Linux library is a working alternative.
+The vendor's Intel-built Windows library has an incompatible calling convention.
+Use the MinGW build or Windows Subsystem for Linux.

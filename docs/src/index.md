@@ -4,56 +4,68 @@ CurrentModule = SNOPT
 
 # SNOPT.jl
 
-[SNOPT.jl](https://github.com/EllissoideRotondo/SNOPT.jl) is an unofficial Julia wrapper for
-[SNOPT](https://ccom.ucsd.edu/~optimizers/solvers/snopt/) (Sparse Nonlinear
-OPTimizer), a sequential quadratic programming (SQP) solver for smooth,
-large-scale, sparsely constrained nonlinear optimization problems of the form
+SNOPT.jl is an unofficial Julia interface to
+[SNOPT](https://ccom.ucsd.edu/~optimizers/solvers/snopt/). SNOPT solves smooth,
+constrained nonlinear optimization problems.
 
-```math
-\min_{x \in \mathbb{R}^n} \; f(x)
-\quad \text{subject to} \quad
-l \le \begin{pmatrix} x \\ c(x) \end{pmatrix} \le u,
-```
-
-where ``f`` and the constraint functions ``c`` are smooth and may be nonlinear.
-
-The package exposes all three SNOPT Fortran entry points — `snOptA`, `snOptB`,
-and `snOptC` — through Julia callbacks, and provides [`snopt`](@ref) as the main
-Julia-facing entry point.
+The package provides three low-level interfaces. It also provides [`snopt`](@ref)
+as the main Julia entry point.
 
 !!! note "Commercial solver required"
-    SNOPT itself is closed-source commercial software. You must obtain a
-    [SNOPT license](https://ccom.ucsd.edu/~optimizers/solvers/snopt/) and a built
-    `libsnopt7` shared library separately; it is **not** bundled with this package.
-    See [Installation](@ref).
+    Obtain a SNOPT license and a compatible `libsnopt7` shared library.
+    The Julia package does not include either item.
 
-!!! note "Concurrency"
-    SNOPT keeps one global Fortran session per process, so SNOPT.jl serializes
-    solves internally: concurrent calls from several threads are safe, but they
-    run one at a time. Use multiple Julia processes for parallel solves.
+## Choose an interface
+
+| Need | Interface |
+| --- | --- |
+| Managed workspace and split callbacks | [`snopt`](@ref) |
+| Separate objective and constraint callbacks | [`SnoptB`](@ref) |
+| One combined callback | [`SnoptC`](@ref) |
+| Stacked rows and separate derivative structure | [`SnoptA`](@ref) |
+
+Use
+[OptimizationSNOPT.jl](https://EllissoideRotondo.github.io/OptimizationSNOPT.jl/stable/)
+for Optimization.jl problems and automatic differentiation.
 
 ## Quick start
 
 ```julia
 using SNOPT
 
+objective(x) = (x[1] - 1.0)^2 + (x[2] - 2.0)^2
+
+function gradient!(gradient, x)
+    gradient[1] = 2.0 * (x[1] - 1.0)
+    gradient[2] = 2.0 * (x[2] - 2.0)
+    return nothing
+end
+
 result = snopt(
-    x -> (x[1] - 1)^2 + (x[2] - 2)^2,                          # objective f(x)
-    (g, x) -> (g[1] = 2(x[1]-1); g[2] = 2(x[2]-2); nothing),   # gradient g!(g, x)
-    [0.0, 0.0];                                                # starting point
-    lb = -10.0, ub = 10.0,
+    objective,
+    gradient!,
+    [0.0, 0.0];
+    lb = -10.0,
+    ub = 10.0,
     options = ["Major print level" => 0],
 )
 
-result.status_symbol   # :Solve_Succeeded
-result.x               # ≈ [1.0, 2.0]
-result.objective       # ≈ 0.0
+result.status_symbol
+result.x
+result.objective
 ```
 
-## Where to go next
+## Continue
 
-- [Installation](@ref) — providing `libsnopt7` and verifying the setup.
-- [High-level interface](@ref) — the `snopt` entry point in detail.
-- [Low-level interface](@ref) — driving `snOptA`/`snOptB`/`snOptC` directly.
-- [Examples](@ref) — fully worked constrained and unconstrained problems.
-- [API reference](@ref) — every exported symbol.
+1. Follow [Installation](@ref).
+2. Read the [High-level interface](@ref).
+3. Run the [Examples](@ref).
+4. Use the [Low-level interface](@ref) only when needed.
+5. Check the [API reference](@ref) for exact signatures.
+
+## Concurrency
+
+SNOPT owns one global Fortran workspace per process. SNOPT.jl serializes
+workspace creation and solves. Threaded solves are safe, but run sequentially.
+
+Use separate Julia processes for parallel solves.

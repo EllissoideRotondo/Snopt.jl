@@ -151,47 +151,35 @@ end
 """
     snopt(eval_obj, eval_grad, x0; kwargs...) -> SnoptResult
 
-Solve a nonlinear optimization problem through SNOPT's `snOptB` interface using
-Julia callbacks.
+Solve through SNOPT's `snOptB` interface and return a [`SnoptResult`](@ref).
 
-`eval_obj(x)` returns the scalar objective and `eval_grad(g, x)` fills the
-objective gradient. The high-level interface always requires this gradient
-callback. For constrained problems, it also requires `eval_jac`; use the low-level
-[`SnoptA`](@ref) interface if you want SNOPT to finite-difference derivatives.
+`eval_obj(x)` returns one real objective value. `eval_grad(gradient, x)` must
+fill every objective-gradient entry. `x0` must be nonempty and finite.
 
-Keyword arguments:
+Constrained problems require `eval_con`, `eval_jac`, `lcon`, and `ucon`.
+`eval_con(values, x)` fills every constraint value. `eval_jac(nonzeros, x)`
+fills derivatives in the column-major storage order of `J`.
 
-  * `lb`, `ub`: variable lower/upper bounds; scalars are broadcast.
-  * `eval_con`, `eval_jac`, `lcon`, `ucon`: optional nonlinear constraints.
-    `eval_con(c, x)` fills constraint values and `eval_jac(jnz, x)` fills the
-    Jacobian nonzeros in the column-major order of `J`.
-  * `J`: optional sparse constraint-Jacobian sparsity. If omitted for a
-    constrained problem, a dense sparsity pattern is used.
-  * `options`: SNOPT options as a vector of pairs, for example
-    `["Major print level" => 0, :minor_print_level => 0]`.
-  * `callback`: optional callback receiving objective/constraint evaluation
-    events. Use this for evaluation-level monitoring or early termination.
-  * `snlog`: optional callback receiving `SnoptMajorLog` major-iteration events.
-    Use this for trace/progress output with meaningful iteration counters.
-  * `snstop`: optional callback receiving `SnoptStopEvent` major-iteration events.
-    Return `false` from it to stop SNOPT; the solve then reports inform code 74
-    (`:User_Requested_Stop`). Use this for custom termination criteria.
-  * `start`: SNOPT start mode, `"Cold"` (default) or `"Warm"`. A warm start
-    also requires `basis`. (`"Hot"` is rejected here: SNOPT's hot start reuses
-    factorization state from the previous solve's workspace, and the high-level
-    entry point builds a fresh workspace per call. Hot-start via the low-level
-    interface by reusing one workspace across solves.)
-  * `basis`: a [`SnoptBasis`](@ref) from a previous result, reused as the
-    starting basis. Only valid together with `start = "Warm"`.
-  * `printfile`, `summfile`: paths for SNOPT's print and summary files; empty
-    strings (the default) suppress the user-visible output. (When both are
-    empty, a throwaway temporary file still backs the summary channel — SNOPT
-    misbehaves with every channel on the null device — and is deleted when the
-    workspace closes.)
-  * `name`: the ≤8-character problem name SNOPT prints.
+# Keywords
 
-`x0` must be finite, and bounds may not contain NaN (`±Inf` is mapped to
-SNOPT's infinite-bound value).
+- `lb`, `ub`: Scalar or vector variable bounds. Bounds may contain `Inf`.
+- `eval_con`, `eval_jac`: In-place constraint and Jacobian callbacks.
+- `lcon`, `ucon`: Constraint bounds with equal lengths.
+- `J`: Optional sparse Jacobian structure. The default structure is dense.
+- `options`: SNOPT settings as a vector of pairs.
+- `callback`: Evaluation event callback. Return `false` to request a stop.
+- `snlog`: [`SnoptMajorLog`](@ref) callback for major-iteration progress.
+- `snstop`: [`SnoptStopEvent`](@ref) callback for custom stopping rules.
+- `start`: `"Cold"` or `"Warm"`. A warm start requires `basis`.
+- `basis`: [`SnoptBasis`](@ref) from a compatible previous result.
+- `printfile`, `summfile`: SNOPT output paths. Empty strings suppress output.
+- `name`: Problem name with at most eight characters.
+
+The function rejects `start = "Hot"`. A hot start needs one reused low-level
+workspace. See the [Low-level interface](@ref).
+
+SNOPT owns one active workspace per process. This function holds the package
+lock across workspace sizing, initialization, options, and the solve.
 
 """
 function snopt(eval_obj, eval_grad,
